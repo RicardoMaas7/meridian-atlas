@@ -1,0 +1,572 @@
+/*
+  Meridian — 19th-century Admiralty chart.
+  Design rules, second pass:
+  - No boxed cards. Text sits directly on the paper, separated by hairline
+    rules, the way notes are printed in a chart's margins.
+  - The sheet border carries the chart's signature: graduated scale bars
+    (alternating ink/paper segments) on all four sides.
+  - Buttons look like printed instructions, not SaaS buttons: uppercase
+    letterspaced mono, underlined or thin-ruled, never filled.
+  - Vermilion only for the selected symbol. Ultramarine for routes and links.
+*/
+
+:root {
+  --paper: #f2e9d8;
+  --ink: #2a241c;
+  --ink-faint: rgba(42, 36, 28, 0.4);
+  --ink-hairline: rgba(42, 36, 28, 0.18);
+  --ultramarine: #1f4e79;
+  --ultramarine-faint: rgba(31, 78, 121, 0.35);
+  --vermilion: #a63d2f;
+
+  --serif: 'Spectral', 'Iowan Old Style', Georgia, serif;
+  --mono: 'IBM Plex Mono', 'Cascadia Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--serif);
+  background-image:
+    radial-gradient(115% 90% at 18% 8%, rgba(255, 252, 240, 0.55), transparent 60%),
+    radial-gradient(120% 100% at 85% 95%, rgba(166, 124, 64, 0.12), transparent 55%);
+  background-attachment: fixed;
+}
+
+/* ---------- Sheet frame with graduated scale bars ---------- */
+
+.sheet {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ink);
+  margin: 14px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Alternating ink/paper segments, as on a chart's latitude scale. */
+.frame-scale {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.frame-scale.top,
+.frame-scale.bottom {
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--ink) 0 56px,
+    transparent 56px 112px
+  );
+  border-bottom: 1px solid var(--ink);
+}
+
+.frame-scale.top {
+  top: 0;
+}
+
+.frame-scale.bottom {
+  bottom: 0;
+  border-bottom: none;
+  border-top: 1px solid var(--ink);
+}
+
+.frame-scale.left,
+.frame-scale.right {
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  background: repeating-linear-gradient(
+    180deg,
+    var(--ink) 0 56px,
+    transparent 56px 112px
+  );
+  border-right: 1px solid var(--ink);
+}
+
+.frame-scale.left {
+  left: 0;
+}
+
+.frame-scale.right {
+  right: 0;
+  border-right: none;
+  border-left: 1px solid var(--ink);
+}
+
+/* ---------- Print-style controls ---------- */
+
+button.chart-btn {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 10px 22px;
+  background: none;
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  cursor: pointer;
+}
+
+button.chart-btn:hover {
+  background: rgba(42, 36, 28, 0.06);
+}
+
+button.text-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1px;
+  cursor: pointer;
+}
+
+button.text-btn:hover {
+  color: var(--ultramarine);
+}
+
+/* ---------- Landing ---------- */
+
+.landing {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px 24px;
+}
+
+.cartouche {
+  max-width: 560px;
+}
+
+.cartouche-kicker {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0 0 22px;
+}
+
+.cartouche h1 {
+  font-size: 64px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  margin: 0;
+  text-transform: uppercase;
+  /* engraved double underline */
+  border-bottom: 1px solid var(--ink);
+  padding-bottom: 18px;
+  position: relative;
+}
+
+.cartouche h1::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.cartouche .subtitle {
+  font-style: italic;
+  font-size: 20px;
+  margin: 22px 0 0;
+}
+
+.cartouche .pledge {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.8;
+  margin: 26px auto 34px;
+  max-width: 440px;
+}
+
+.cartouche .pledge strong {
+  color: var(--ultramarine);
+  font-weight: 500;
+}
+
+.actions {
+  display: flex;
+  gap: 30px;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.landing-foot {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  color: var(--ink-faint);
+  margin-top: 48px;
+}
+
+.surveying {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  color: var(--ultramarine);
+}
+
+/* ---------- Chart view ---------- */
+
+.chart-view {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.chart-main {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+}
+
+canvas.chart-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+canvas.chart-canvas.dragging {
+  cursor: grabbing;
+}
+
+/* Title block: open text in the chart's corner, no box. */
+.chart-titleblock {
+  position: absolute;
+  top: 26px;
+  left: 30px;
+  max-width: 340px;
+  /* soft paper wash so routes don't run through the lettering */
+  background: radial-gradient(
+    ellipse at top left,
+    rgba(242, 233, 216, 0.95) 55%,
+    rgba(242, 233, 216, 0) 100%
+  );
+  padding-right: 40px;
+  padding-bottom: 24px;
+}
+
+.chart-titleblock .titleblock-kicker {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.38em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0 0 6px;
+}
+
+.chart-titleblock h2 {
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 0 0 8px;
+  border-bottom: 1px solid var(--ink);
+  display: inline-block;
+  padding-bottom: 6px;
+}
+
+.chart-titleblock .survey-line {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  margin: 0 0 12px;
+}
+
+.chart-titleblock .survey-line em {
+  color: var(--ultramarine);
+  font-style: normal;
+}
+
+/* Legend: open block, bottom-left, ruled not boxed. */
+.chart-legend {
+  position: absolute;
+  bottom: 26px;
+  left: 30px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  line-height: 2.1;
+  background: radial-gradient(
+    ellipse at bottom left,
+    rgba(242, 233, 216, 0.95) 55%,
+    rgba(242, 233, 216, 0) 100%
+  );
+  padding-right: 36px;
+  padding-top: 4px;
+}
+
+.chart-legend .legend-title {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.38em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  border-bottom: 1px solid var(--ink-hairline);
+  padding-bottom: 4px;
+  margin-bottom: 6px;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 28px;
+  height: 0;
+  border-top: 1.5px solid var(--ultramarine);
+}
+
+.legend-swatch.dashed {
+  border-top-style: dashed;
+  border-top-color: var(--ink-faint);
+}
+
+.legend-swatch.sounding {
+  width: 9px;
+  height: 9px;
+  margin: 0 9.5px;
+  border: 1.5px solid var(--ultramarine);
+  border-radius: 50%;
+  background: var(--paper);
+}
+
+.legend-glyph {
+  display: inline-block;
+  width: 28px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.legend-swatch.sounding.new {
+  background: var(--ultramarine);
+}
+
+.titleblock-actions {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.grade-was {
+  color: var(--ink-faint);
+  font-style: italic;
+}
+
+button.text-btn.watch-on {
+  color: var(--vermilion);
+  text-decoration-color: var(--vermilion);
+}
+
+/* ---------- Margin column (side panel) ---------- */
+
+.side-panel {
+  width: 360px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--ink);
+  /* a second hairline, offset, like the inner rule of a chart margin */
+  box-shadow: inset 5px 0 0 -4px var(--ink-hairline);
+  background: transparent;
+  overflow-y: auto;
+  padding: 30px 26px 40px 30px;
+}
+
+.side-panel .panel-kicker {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.38em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0 0 10px;
+}
+
+.side-panel h3 {
+  font-family: var(--mono);
+  font-weight: 500;
+  font-size: 17px;
+  margin: 0;
+  color: var(--vermilion);
+  word-break: break-all;
+}
+
+.side-panel .position {
+  font-family: var(--mono);
+  font-size: 11px;
+  margin: 8px 0 0;
+  word-break: break-all;
+  line-height: 1.6;
+}
+
+.soundings {
+  display: flex;
+  gap: 30px;
+  margin: 20px 0 16px;
+  border-top: 1px solid var(--ink-hairline);
+  border-bottom: 1px solid var(--ink-hairline);
+  padding: 10px 0;
+}
+
+.soundings .figure {
+  font-family: var(--serif);
+  font-size: 26px;
+  font-weight: 500;
+}
+
+.soundings .caption {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.node-reading {
+  font-style: italic;
+  font-size: 14px;
+  line-height: 1.65;
+  margin: 0 0 8px;
+}
+
+.route-list h4 {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  font-weight: 400;
+  color: var(--ink-faint);
+  margin: 20px 0 4px;
+  border-bottom: 1px solid var(--ink-hairline);
+  padding-bottom: 4px;
+}
+
+.route-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  color: var(--ultramarine);
+  cursor: pointer;
+  word-break: break-all;
+}
+
+.route-list button:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.route-list .est {
+  color: var(--ink-faint);
+  font-style: italic;
+}
+
+.excerpt {
+  margin-top: 24px;
+}
+
+.excerpt pre {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.65;
+  border-top: 1px solid var(--ink-hairline);
+  padding: 10px 0 0;
+  overflow-x: auto;
+  white-space: pre;
+  margin: 6px 0 0;
+}
+
+/* ---------- Remarks: the chart's numbered marginal notes ---------- */
+
+.directions-intro {
+  font-style: italic;
+  font-size: 14px;
+  line-height: 1.65;
+  margin: 0 0 18px;
+}
+
+.observation {
+  margin-top: 16px;
+}
+
+.observation h4 {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  margin: 0 0 4px;
+}
+
+.observation h4 .numeral {
+  font-weight: 400;
+  font-style: italic;
+  display: inline-block;
+  width: 34px;
+}
+
+.observation p {
+  font-size: 13.5px;
+  line-height: 1.6;
+  margin: 0 0 0 34px;
+}
+
+.observation-refs {
+  margin: 6px 0 0 34px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.9;
+}
+
+.observation-refs button {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--ultramarine);
+  cursor: pointer;
+}
+
+.observation-refs button:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.observation-refs .sep {
+  color: var(--ink-faint);
+}
