@@ -1,12 +1,23 @@
 {
-  "name": "meridian",
+  "name": "meridian-chart",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "A navigational chart of your code: local-first call graphs drawn as a 19th-century nautical chart, plus an MCP server so agents can read them.",
+  "license": "MIT",
+  "repository": "github:RicardoMaas7/meridian",
   "type": "module",
+  "bin": {
+    "meridian-mcp": "dist-mcp/server.mjs"
+  },
+  "files": [
+    "dist-mcp",
+    "public/wasm"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:mcp": "esbuild mcp/server.ts --bundle --platform=node --target=node20 --format=esm --packages=external --outfile=dist-mcp/server.mjs",
+    "prepare": "npm run build:mcp",
     "lint": "eslint .",
     "preview": "vite preview"
   },

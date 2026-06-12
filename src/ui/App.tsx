@@ -184,7 +184,8 @@ export function App() {
             )}
           </div>
           <p className="landing-foot">
-            {SUPPORTED_LANGS_LABEL} · soundings given in number of calls
+            {SUPPORTED_LANGS_LABEL} · soundings given in number of calls ·{' '}
+            <a href="https://github.com/RicardoMaas7/meridian">source</a>
           </p>
         </div>
       )}

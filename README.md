@@ -2,6 +2,11 @@
 
 A navigational chart of your code.
 
+**Use it now: [ricardomaas7.github.io/meridian](https://ricardomaas7.github.io/meridian/)** —
+no install, no account, no upload.
+
+![A Meridian survey](public/og.png)
+
 Open a local folder and Meridian draws its call graph as a 19th-century
 nautical chart: every function is a sounding mark, every resolved call a
 charted route. Everything runs in the browser — parsing included — so no
@@ -47,11 +52,12 @@ under `~/.meridian/surveys`, so an agent can edit code, re-survey, and read
 exactly what changed.
 
 ```sh
-npm run build:mcp
-claude mcp add meridian -- node /absolute/path/to/meridian/dist-mcp/server.mjs
+claude mcp add meridian -- npx -y github:RicardoMaas7/meridian
 ```
 
-Verify the build with `node scripts/check-mcp.mjs`.
+Or from a clone: `npm run build:mcp`, then point your client at
+`node /path/to/meridian/dist-mcp/server.mjs`. Verify the build with
+`node scripts/check-mcp.mjs`.
 
 ## Roadmap
 
