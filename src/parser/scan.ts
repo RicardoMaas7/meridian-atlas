@@ -1,10 +1,11 @@
 import type { FileEntry } from '../types'
 import { langForPath } from './loader'
 
-const SKIP_DIRS = new Set([
+export const SKIP_DIRS = new Set([
   'node_modules',
   '.git',
   'dist',
+  'dist-mcp',
   'build',
   'out',
   '.next',
@@ -15,8 +16,8 @@ const SKIP_DIRS = new Set([
   '.turbo',
 ])
 
-const MAX_FILES = 4000
-const MAX_FILE_BYTES = 1_500_000
+export const MAX_FILES = 4000
+export const MAX_FILE_BYTES = 1_500_000
 
 export async function scanDirectoryHandle(
   dir: FileSystemDirectoryHandle,

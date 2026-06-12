@@ -18,7 +18,8 @@ are honest guesses, labeled as such.
 ## How it works
 
 - **Parsing**: [tree-sitter](https://tree-sitter.github.io/) compiled to
-  WebAssembly, running locally. TypeScript, TSX, and JavaScript grammars.
+  WebAssembly, running locally. Nine grammars: TypeScript, TSX, JavaScript,
+  Python, Go, Rust, Java, C, C++.
 - **Graph**: declarations (functions, methods, classes) become nodes; call
   expressions are resolved first within the file, then by unique global
   name. Ambiguous matches are drawn dashed ("estimated route"); external
@@ -37,9 +38,22 @@ Open the printed URL in a Chromium-based browser for the native folder
 picker; other browsers get a standard directory upload fallback. Or press
 **View specimen** to explore a small bundled example.
 
+## MCP server
+
+The same survey, readable by agents. Two tools: `survey` (chart a directory;
+returns the title block, the delta since the last survey, and the remarks)
+and `symbol` (one symbol's callers, callees, and source). Snapshots persist
+under `~/.meridian/surveys`, so an agent can edit code, re-survey, and read
+exactly what changed.
+
+```sh
+npm run build:mcp
+claude mcp add meridian -- node /absolute/path/to/meridian/dist-mcp/server.mjs
+```
+
+Verify the build with `node scripts/check-mcp.mjs`.
+
 ## Roadmap
 
 - Precise cross-file resolution via SCIP indexers (scip-typescript first)
-- Python grammar
 - Desktop app (Tauri) with the same chart
-- MCP server so agents can read the chart too

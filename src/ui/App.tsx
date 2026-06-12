@@ -27,11 +27,14 @@ export function App() {
   const [phase, setPhase] = useState<Phase>({ name: 'landing' })
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [watching, setWatching] = useState(false)
+  const [canWatch, setCanWatch] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dirHandleRef = useRef<FileSystemDirectoryHandle | null>(null)
   const phaseRef = useRef(phase)
   const surveyingRef = useRef(false)
-  phaseRef.current = phase
+  useEffect(() => {
+    phaseRef.current = phase
+  })
 
   const survey = useCallback(
     async (files: FileEntry[], title: string, silent: boolean) => {
@@ -95,6 +98,7 @@ export function App() {
           window as unknown as { showDirectoryPicker: () => Promise<FileSystemDirectoryHandle> }
         ).showDirectoryPicker()
         dirHandleRef.current = dir
+        setCanWatch(true)
         setWatching(false)
         void runSurvey(scanDirectoryHandle(dir), dir.name)
       } catch {
@@ -111,6 +115,7 @@ export function App() {
       const first = list[0] as File & { webkitRelativePath?: string }
       const root = first.webkitRelativePath?.split('/')[0] ?? 'Local folder'
       dirHandleRef.current = null
+      setCanWatch(false)
       setWatching(false)
       void runSurvey(scanFileList(list), root)
     },
@@ -119,6 +124,7 @@ export function App() {
 
   const openSpecimen = useCallback(() => {
     dirHandleRef.current = null
+    setCanWatch(false)
     setWatching(false)
     void runSurvey(Promise.resolve(SPECIMEN_FILES), SPECIMEN_NAME)
   }, [runSurvey])
@@ -136,8 +142,6 @@ export function App() {
     const timer = setInterval(resurvey, WATCH_INTERVAL_MS)
     return () => clearInterval(timer)
   }, [watching, resurvey])
-
-  const canWatch = dirHandleRef.current != null
 
   return (
     <div className="sheet">

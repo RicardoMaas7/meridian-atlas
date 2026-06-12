@@ -31,8 +31,11 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
   const frameRef = useRef(0)
   const drawRef = useRef<() => void>(() => {})
 
-  selectedRef.current = selectedId
-  newIdsRef.current = newIds
+  // Synced via effect (before the redraw effect below) so render stays pure.
+  useEffect(() => {
+    selectedRef.current = selectedId
+    newIdsRef.current = newIds
+  })
 
   useEffect(() => {
     const canvas = canvasRef.current
