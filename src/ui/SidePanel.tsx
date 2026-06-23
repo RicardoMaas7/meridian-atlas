@@ -43,7 +43,8 @@ function deltaObservation(delta: SurveyDelta, chart: CodeChart, t: ReturnType<ty
 
 export function SidePanel({ chart, selectedId, delta, onSelect }: Props) {
   const { t } = useI18n()
-  const node = chart.nodes.find((n) => n.id === selectedId) ?? null
+  const byId = useMemo(() => new Map(chart.nodes.map((n) => [n.id, n])), [chart.nodes])
+  const node = selectedId != null ? byId.get(selectedId) ?? null : null
   const observations = useMemo(() => {
     const notes = interpretChart(chart)
     if (delta) notes.unshift(deltaObservation(delta, chart, t))
@@ -80,7 +81,6 @@ export function SidePanel({ chart, selectedId, delta, onSelect }: Props) {
 
   const inboundEdges = chart.edges.filter((e) => e.target === node.id)
   const outboundEdges = chart.edges.filter((e) => e.source === node.id)
-  const byId = new Map(chart.nodes.map((n) => [n.id, n]))
   const reading = interpretNode(chart, node)
 
   return (

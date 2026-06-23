@@ -286,16 +286,22 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
     let lastX = 0
     let lastY = 0
 
+    const nodeMeshArray = [...nodeMeshes.values()]
+    const nodeByMesh = new Map<THREE.Mesh, ChartNode>()
+    for (const n of chart.nodes) {
+      const mesh = nodeMeshes.get(n.id)
+      if (mesh) nodeByMesh.set(mesh, n)
+    }
+
     const hitTest = (clientX: number, clientY: number): ChartNode | null => {
       const rect = renderer.domElement.getBoundingClientRect()
       pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1
       pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1
       raycaster.setFromCamera(pointer, camera)
-      const hits = raycaster.intersectObjects([...nodeMeshes.values()], false)
+      const hits = raycaster.intersectObjects(nodeMeshArray, false)
       if (hits.length === 0) return null
       const hit = hits[0]
-      const id = hit.object.userData.id as number
-      return chart.nodes.find((n) => n.id === id) ?? null
+      return nodeByMesh.get(hit.object as THREE.Mesh) ?? null
     }
 
     const onPointerDown = (e: PointerEvent) => {

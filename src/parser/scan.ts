@@ -42,14 +42,23 @@ async function walk(
       if (!SKIP_DIRS.has(handle.name) && !handle.name.startsWith('.')) {
         await walk(handle as FileSystemDirectoryHandle, path, entries, onProgress)
       }
-    } else {
-      const lang = langForPath(handle.name)
-      if (!lang) continue
-      const file = await (handle as FileSystemFileHandle).getFile()
-      if (file.size > MAX_FILE_BYTES) continue
-      entries.push({ path, text: await file.text(), lang })
-      onProgress?.(entries.length)
+      continue
     }
+    const lang = langForPath(handle.name)
+    if (!lang) continue
+    let file: File
+    try {
+      file = await (handle as FileSystemFileHandle).getFile()
+    } catch {
+      continue
+    }
+    if (file.size > MAX_FILE_BYTES) continue
+    try {
+      entries.push({ path, text: await file.text(), lang })
+    } catch {
+      continue
+    }
+    onProgress?.(entries.length)
   }
 }
 

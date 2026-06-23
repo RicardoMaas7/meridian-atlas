@@ -39,12 +39,15 @@ export function App() {
   const nativeDirRef = useRef<string | null>(null)
   const phaseRef = useRef(phase)
   const surveyingRef = useRef(false)
+  const alertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isNative = tauriAvailable()
   const landingRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    phaseRef.current = phase
-  })
+  useEffect(() => () => {
+    if (alertTimerRef.current) clearTimeout(alertTimerRef.current)
+  }, [])
+
+  phaseRef.current = phase
 
   // Animate landing page
   useEffect(() => {
@@ -92,7 +95,11 @@ export function App() {
             duration: 400,
             ease: 'outBack',
           })
-          setTimeout(() => alert(t.labels.noSupportedFiles), 200)
+          if (alertTimerRef.current) clearTimeout(alertTimerRef.current)
+          alertTimerRef.current = setTimeout(() => {
+            alertTimerRef.current = null
+            alert(t.labels.noSupportedFiles)
+          }, 200)
         }
         return
       }
@@ -330,27 +337,34 @@ export function App() {
             <div className="chart-titleblock" data-anim>
               <p className="titleblock-kicker">{t.labels.surveyOf}</p>
               <h2>{phase.title}</h2>
-              <div className="stat-row">
-                <div className="stat">
-                  <span className="stat-num">{phase.chart.nodes.length}</span>
-                  <span className="stat-label">{t.labels.symbols}</span>
-                </div>
-                <div className="stat">
-                  <span className="stat-num">{phase.chart.edges.length}</span>
-                  <span className="stat-label">{t.labels.routes}</span>
-                </div>
-                <div className="stat">
-                  <span className="stat-num">{phase.chart.fileCount}</span>
-                  <span className="stat-label">{t.labels.files}</span>
-                </div>
-                <div className="stat stat-grade">
-                  <span className="stat-num grade">{gradeChart(phase.chart).grade}</span>
-                  <span className="stat-label">{t.labels.seaworthiness}</span>
-                </div>
-              </div>
-              {phase.delta && phase.delta.prevGrade !== gradeChart(phase.chart).grade && (
-                <p className="grade-was">({t.labels.was} {phase.delta.prevGrade})</p>
-              )}
+              {(() => {
+                const { grade } = gradeChart(phase.chart)
+                return (
+                  <>
+                    <div className="stat-row">
+                      <div className="stat">
+                        <span className="stat-num">{phase.chart.nodes.length}</span>
+                        <span className="stat-label">{t.labels.symbols}</span>
+                      </div>
+                      <div className="stat">
+                        <span className="stat-num">{phase.chart.edges.length}</span>
+                        <span className="stat-label">{t.labels.routes}</span>
+                      </div>
+                      <div className="stat">
+                        <span className="stat-num">{phase.chart.fileCount}</span>
+                        <span className="stat-label">{t.labels.files}</span>
+                      </div>
+                      <div className="stat stat-grade">
+                        <span className="stat-num grade">{grade}</span>
+                        <span className="stat-label">{t.labels.seaworthiness}</span>
+                      </div>
+                    </div>
+                    {phase.delta && phase.delta.prevGrade !== grade && (
+                      <p className="grade-was">({t.labels.was} {phase.delta.prevGrade})</p>
+                    )}
+                  </>
+                )
+              })()}
               <div className="titleblock-actions">
                 <button className="btn btn-ghost btn-sm" onClick={() => {
                   animate('.sheet', { opacity: [1, 0], duration: 320, ease: 'inQuad' })

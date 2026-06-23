@@ -138,7 +138,7 @@ describe('diffAgainst', () => {
     ]), 'dir')
     const chart = makeChart([makeNode({ id: 0, name: 'old' })])
     const delta = diffAgainst(prev, chart)
-    expect(delta.removed).toContain('gone')
+    expect(delta.removed).toContain('gone (a.ts)')
   })
 
   it('detects altered nodes', () => {

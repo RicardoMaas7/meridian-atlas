@@ -103,7 +103,10 @@ export function diffAgainst(prev: SurveySnapshot, chart: CodeChart): SurveyDelta
   }
   const removed = Object.keys(prev.entries)
     .filter((key) => !seen.has(key))
-    .map((key) => key.split('::')[1])
+    .map((key) => {
+      const [file, name] = key.split('::')
+      return file ? `${name} (${file})` : name
+    })
   return {
     prevTakenAt: prev.takenAt,
     prevGrade: prev.grade,

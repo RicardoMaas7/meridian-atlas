@@ -233,7 +233,7 @@ const es: Translations = {
     rocksTitle: 'rocas',
     deadCode: 'Ninguna ruta los toca. Código muerto, o llamado desde fuera del levantamiento: tests, plantillas, reflexión.',
     estimatedWaters: '% estimado',
-    nameCollisions: 'Esa proporción de rutas se匹配 por nombre nomás; nombres cortos comunes colliden. Rutas punteadas son pistas, no hechos.',
+    nameCollisions: 'Esa proporción de rutas se empareja solo por nombre; los nombres cortos comunes colisionan. Las rutas punteadas son pistas, no hechos.',
     straits: 'Estrechos',
     crossModule: 'ruta cruza límites de módulo',
     busiest: 'Más transitado',
