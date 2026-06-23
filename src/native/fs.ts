@@ -9,7 +9,14 @@ interface SourceFile {
 }
 
 const isTauri = (): boolean => {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+  if (typeof window === 'undefined') return false
+  // Tauri 2.x exposes the runtime on multiple globals
+  const w = window as unknown as Record<string, unknown>
+  return (
+    '__TAURI_INTERNALS__' in w ||
+    '__TAURI__' in w ||
+    '_TAURI_INVOKE__' in w
+  )
 }
 
 export async function pickDirectory(): Promise<string | null> {

@@ -2,7 +2,7 @@ import type { CallRef, ChartEdge, ChartNode, CodeChart, Decl, FileEntry } from '
 import { extractFile } from '../parser/extract'
 import type { PreciseResolver } from './scip'
 
-const MAX_DASHED_CANDIDATES = 3
+const MAX_DASHED_CANDIDATES = 8
 
 export async function buildChart(
   files: FileEntry[],
@@ -41,8 +41,6 @@ export async function buildChart(
   }
 
   const declById = new Map(decls.map((d) => [d.id, d]))
-  // `${file}:${row}` → declarations whose name token sits there, for mapping a
-  // SCIP definition site back to the symbol we drew.
   const declByLoc = new Map<string, Decl[]>()
   for (const d of decls) {
     const key = `${d.file}:${d.row}`
@@ -72,9 +70,7 @@ export async function buildChart(
     const from = declById.get(call.fromDecl)
     if (!from) continue
 
-    // 0. Precise: when a SCIP index covers this file, it knows exactly which
-    // definition the call binds to. Authoritative — no name guessing, and a
-    // miss means the call leaves the project (external/builtin), not a dash.
+    // 0. Precise
     if (precise?.covers(call.file)) {
       const target = precise.resolve(call.file, call.row, call.col, call.name)
       const targetDecl = target && declAt(target.file, target.row, call.name)
@@ -83,7 +79,7 @@ export async function buildChart(
       continue
     }
 
-    // 1. Same file: a charted route.
+    // 1. Same file
     const local = byFile.get(from.file)?.get(call.name)
     const localTarget =
       local?.find((d) => (call.kind === 'method' ? d.kind === 'method' : d.kind !== 'method')) ??
@@ -93,11 +89,9 @@ export async function buildChart(
       continue
     }
 
-    // 2. Global by name: unique match is charted, few matches are estimated (dashed).
+    // 2. Global by name
     const table = call.kind === 'method' ? methodsByName : byName
     let candidates = (table.get(call.name) ?? []).filter((d) => d.file !== from.file)
-    // Selector/attribute calls (pkg.fn() in Go, module.fn() in Python) often
-    // point at plain functions, not methods — fall back to the function index.
     if (candidates.length === 0 && call.kind === 'method') {
       candidates = (byName.get(call.name) ?? []).filter((d) => d.file !== from.file)
     }
@@ -106,7 +100,7 @@ export async function buildChart(
     } else if (candidates.length > 1 && candidates.length <= MAX_DASHED_CANDIDATES) {
       for (const candidate of candidates) addEdge(from.id, candidate.id, false)
     } else {
-      unresolved++ // external library, built-in, or too ambiguous to chart honestly
+      unresolved++
     }
   }
 

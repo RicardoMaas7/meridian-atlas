@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { animate, stagger } from 'animejs'
 import type { CodeChart, FileEntry } from '../types'
 import { buildChart } from '../graph/build'
 import { scanDirectoryHandle, scanFileList } from '../parser/scan'
@@ -39,17 +40,59 @@ export function App() {
   const phaseRef = useRef(phase)
   const surveyingRef = useRef(false)
   const isNative = tauriAvailable()
+  const landingRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     phaseRef.current = phase
   })
+
+  // Animate landing page
+  useEffect(() => {
+    if (phase.name !== 'landing' || !landingRef.current) return
+    const el = landingRef.current
+    const targets = el.querySelectorAll('[data-anim]')
+    animate(targets, {
+      opacity: [0, 1],
+      translateY: [40, 0],
+      delay: stagger(120, { start: 200 }),
+      duration: 1100,
+      ease: 'outExpo',
+    })
+  }, [phase.name])
+
+  // Animate phase transitions
+  useEffect(() => {
+    if (phase.name === 'surveying') {
+      animate('.surveying', {
+        opacity: [0, 1],
+        scale: [0.95, 1],
+        duration: 600,
+        ease: 'outQuart',
+      })
+    } else if (phase.name === 'charted') {
+      const targets = document.querySelectorAll('.chart-view [data-anim]')
+      animate(targets, {
+        opacity: [0, 1],
+        translateX: [-30, 0],
+        delay: stagger(80, { start: 400 }),
+        duration: 900,
+        ease: 'outQuart',
+      })
+    }
+  }, [phase.name])
 
   const survey = useCallback(
     async (files: FileEntry[], title: string, silent: boolean) => {
       if (files.length === 0) {
         if (!silent) {
           setPhase({ name: 'landing' })
-          alert(t.labels.noSupportedFiles)
+          animate('.alert', {
+            opacity: [0, 1],
+            translateY: [-20, 0],
+            duration: 400,
+            ease: 'outBack',
+          })
+          setTimeout(() => alert(t.labels.noSupportedFiles), 200)
         }
         return
       }
@@ -146,6 +189,7 @@ export function App() {
 
   const openSpecimen = useCallback(() => {
     dirHandleRef.current = null
+    nativeDirRef.current = null
     setCanWatch(false)
     setWatching(false)
     void runSurvey(Promise.resolve(SPECIMEN_FILES), SPECIMEN_NAME)
@@ -167,7 +211,6 @@ export function App() {
     return () => clearInterval(timer)
   }, [watching, resurvey])
 
-  // Listen for native menu events from Tauri
   useEffect(() => {
     if (!isNative) return
     let unlisten: (() => void) | undefined
@@ -178,7 +221,8 @@ export function App() {
       } else if (action === 'view_specimen') {
         openSpecimen()
       } else if (action === 'new_chart') {
-        setPhase({ name: 'landing' })
+        animate('.sheet', { opacity: [1, 0], duration: 400, ease: 'inQuad' })
+        setTimeout(() => setPhase({ name: 'landing' }), 380)
       } else if (action === 'resurvey') {
         resurvey()
       } else if (action === 'about') {
@@ -192,12 +236,21 @@ export function App() {
     }
   }, [isNative, t.labels.title, openFolder, openSpecimen, resurvey])
 
+  // Animate selection changes
+  useEffect(() => {
+    if (phase.name !== 'charted') return
+    animate('.titleblock em, .grade-was', {
+      scale: [0.85, 1],
+      opacity: [0.4, 1],
+      duration: 500,
+      ease: 'outBack',
+    })
+  }, [selectedId, phase.name])
+
   return (
     <div className="sheet">
-      <div className="frame-scale top" />
-      <div className="frame-scale bottom" />
-      <div className="frame-scale left" />
-      <div className="frame-scale right" />
+      <div className="grain" />
+      <div className="vignette" />
       <LanguageSelector />
       <input
         ref={fileInputRef}
@@ -210,29 +263,58 @@ export function App() {
       />
 
       {phase.name !== 'charted' && (
-        <div className="landing">
-          <div className="cartouche">
-            <p className="cartouche-kicker">{t.labels.kicker}</p>
-            <h1>{t.labels.title}</h1>
-            <p className="subtitle">{t.labels.subtitle}</p>
-            <p className="pledge">{t.labels.pledge}</p>
-            {phase.name === 'landing' ? (
-              <div className="actions">
-                <button className="chart-btn" onClick={openFolder}>
-                  {t.labels.chartFolder}
-                </button>
-                <button className="text-btn" onClick={openSpecimen}>
-                  {t.labels.viewSpecimen}
-                </button>
-              </div>
-            ) : (
-              <p className="surveying">{phase.detail}</p>
-            )}
+        <div className="landing" ref={landingRef}>
+          <div className="landing-mark" data-anim>
+            <svg viewBox="0 0 200 200" width="80" height="80">
+              <defs>
+                <radialGradient id="markGrad" cx="50%" cy="50%">
+                  <stop offset="0%" stopColor="#f2cf80" stopOpacity="1" />
+                  <stop offset="60%" stopColor="#d4a857" stopOpacity="0.6" />
+                  <stop offset="100%" stopColor="#d4a857" stopOpacity="0" />
+                </radialGradient>
+              </defs>
+              <circle cx="100" cy="100" r="60" fill="url(#markGrad)" />
+              <circle cx="100" cy="100" r="36" fill="none" stroke="#d4a857" strokeWidth="1" />
+              <circle cx="100" cy="100" r="20" fill="none" stroke="#d4a857" strokeWidth="0.6" />
+              <line x1="100" y1="20" x2="100" y2="40" stroke="#d4a857" strokeWidth="0.6" />
+              <line x1="100" y1="160" x2="100" y2="180" stroke="#d4a857" strokeWidth="0.6" />
+              <line x1="20" y1="100" x2="40" y2="100" stroke="#d4a857" strokeWidth="0.6" />
+              <line x1="160" y1="100" x2="180" y2="100" stroke="#d4a857" strokeWidth="0.6" />
+              <circle cx="100" cy="100" r="3" fill="#f2cf80" />
+            </svg>
           </div>
-          <p className="landing-foot">
-            {SUPPORTED_LANGS_LABEL} · {t.labels.landingFoot} ·{' '}
+          <p className="kicker" data-anim>{t.labels.kicker}</p>
+          <h1 className="display" data-anim>{t.labels.title}</h1>
+          <p className="subtitle" data-anim>{t.labels.subtitle}</p>
+          <p className="pledge" data-anim>{t.labels.pledge}</p>
+          {phase.name === 'landing' ? (
+            <div className="actions" data-anim>
+              <button className="btn btn-primary" onClick={openFolder}>
+                <span>{t.labels.chartFolder}</span>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="square" />
+                </svg>
+              </button>
+              <button className="btn btn-ghost" onClick={openSpecimen}>
+                {t.labels.viewSpecimen}
+              </button>
+            </div>
+          ) : (
+            <div className="surveying" data-anim>
+              <div className="surveying-pulse" />
+              <p className="surveying-detail">{phase.detail}</p>
+              <div className="progress-track">
+                <div className="progress-bar" />
+              </div>
+            </div>
+          )}
+          <footer className="landing-foot" data-anim>
+            <span className="langs">{SUPPORTED_LANGS_LABEL}</span>
+            <span className="dot" />
+            <span>{t.labels.landingFoot}</span>
+            <span className="dot" />
             <a href="https://github.com/RicardoMaas7/meridian">{t.labels.sourceLink}</a>
-          </p>
+          </footer>
         </div>
       )}
 
@@ -245,58 +327,72 @@ export function App() {
               newIds={new Set(phase.delta?.added.map((n) => n.id) ?? [])}
               onSelect={setSelectedId}
             />
-            <div className="chart-titleblock">
+            <div className="chart-titleblock" data-anim>
               <p className="titleblock-kicker">{t.labels.surveyOf}</p>
               <h2>{phase.title}</h2>
-              <p className="survey-line">
-                <em>{phase.chart.nodes.length}</em> {t.labels.symbols} ·{' '}
-                <em>{phase.chart.edges.length}</em> {t.labels.routes} ·{' '}
-                <em>{phase.chart.fileCount}</em> {t.labels.files}
-              </p>
-              <p className="survey-line">
-                {t.labels.seaworthiness} <em>{gradeChart(phase.chart).grade}</em>
-                {phase.delta && phase.delta.prevGrade !== gradeChart(phase.chart).grade && (
-                  <span className="grade-was"> ({t.labels.was} {phase.delta.prevGrade})</span>
-                )}
-              </p>
+              <div className="stat-row">
+                <div className="stat">
+                  <span className="stat-num">{phase.chart.nodes.length}</span>
+                  <span className="stat-label">{t.labels.symbols}</span>
+                </div>
+                <div className="stat">
+                  <span className="stat-num">{phase.chart.edges.length}</span>
+                  <span className="stat-label">{t.labels.routes}</span>
+                </div>
+                <div className="stat">
+                  <span className="stat-num">{phase.chart.fileCount}</span>
+                  <span className="stat-label">{t.labels.files}</span>
+                </div>
+                <div className="stat stat-grade">
+                  <span className="stat-num grade">{gradeChart(phase.chart).grade}</span>
+                  <span className="stat-label">{t.labels.seaworthiness}</span>
+                </div>
+              </div>
+              {phase.delta && phase.delta.prevGrade !== gradeChart(phase.chart).grade && (
+                <p className="grade-was">({t.labels.was} {phase.delta.prevGrade})</p>
+              )}
               <div className="titleblock-actions">
-                <button className="text-btn" onClick={() => setPhase({ name: 'landing' })}>
+                <button className="btn btn-ghost btn-sm" onClick={() => {
+                  animate('.sheet', { opacity: [1, 0], duration: 320, ease: 'inQuad' })
+                  setTimeout(() => setPhase({ name: 'landing' }), 300)
+                }}>
                   {t.labels.newChart}
                 </button>
                 {canWatch && (
-                  <button className="text-btn" onClick={resurvey}>
+                  <button className="btn btn-ghost btn-sm" onClick={resurvey}>
                     {t.labels.resurvey}
                   </button>
                 )}
                 {canWatch && (
                   <button
-                    className={`text-btn ${watching ? 'watch-on' : ''}`}
+                    className={`btn btn-ghost btn-sm ${watching ? 'btn-active' : ''}`}
                     onClick={() => setWatching((value) => !value)}
                   >
+                    <span className={`watch-dot ${watching ? 'watch-on' : ''}`} />
                     {watching ? t.labels.standingWatch : t.labels.keepWatch}
                   </button>
                 )}
               </div>
             </div>
-            <div className="chart-legend">
+            <div className="chart-legend" data-anim>
               <div className="legend-title">{t.labels.legend}</div>
               <div className="legend-row">
-                <span className="legend-swatch" /> {t.labels.chartedRoute}
+                <span className="legend-swatch swatch-gold" /> {t.labels.chartedRoute}
               </div>
               <div className="legend-row">
-                <span className="legend-swatch dashed" /> {t.labels.estimatedRoute}
+                <span className="legend-swatch swatch-dashed" /> {t.labels.estimatedRoute}
               </div>
               <div className="legend-row">
                 <span className="legend-glyph">›</span> {t.labels.arrowDirection}
               </div>
               <div className="legend-row">
-                <span className="legend-swatch sounding" /> {t.labels.symbolSize}
+                <span className="legend-swatch swatch-crystal" /> {t.labels.symbolSize}
               </div>
               <div className="legend-row">
                 <span className="legend-glyph">+</span> {t.labels.rock}
               </div>
               <div className="legend-row">
-                <span className="legend-swatch sounding new" /> {t.labels.filledNew}
+                <span className="legend-swatch swatch-new" /> {t.labels.filledNew}
               </div>
             </div>
           </div>
