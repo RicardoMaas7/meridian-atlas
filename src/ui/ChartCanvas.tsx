@@ -19,16 +19,12 @@ const PALETTE = {
   goldBright: 0xf2cf80,
   copper: 0xc87856,
   azure: 0x4a8fc5,
-  crystal: 0xb6e1ff,
-  rose: 0xff7d6b,
-  paper: 0xefe7d3,
 }
 
 interface Scene3D {
   renderer: THREE.WebGLRenderer
   scene: THREE.Scene
   camera: THREE.PerspectiveCamera
-  group: THREE.Group
   nodeMeshes: Map<number, THREE.Mesh>
   nodeRings: Map<number, THREE.Mesh>
   edgeLines: THREE.LineSegments
@@ -37,7 +33,14 @@ interface Scene3D {
   labels: Map<number, THREE.Sprite>
   raycaster: THREE.Raycaster
   pointer: THREE.Vector2
+  cameraTarget: THREE.Vector3
+  cameraPos: THREE.Vector3
 }
+
+const MAX_PARTICLES = 250
+const TARGET_FPS = 30
+const FRAME_INTERVAL = 1000 / TARGET_FPS
+const FORCE_TICKS = 150 // Reduced from 300
 
 export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -45,10 +48,9 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
   const hoverRef = useRef<ChartNode | null>(null)
   const selectedRef = useRef<number | null>(selectedId)
   const newIdsRef = useRef<Set<number>>(newIds)
-  const cameraTargetRef = useRef(new THREE.Vector3(0, 0, 0))
-  const cameraPosRef = useRef(new THREE.Vector3(0, 0, 800))
   const isUserInteractingRef = useRef(false)
   const idleTimeRef = useRef(0)
+  const isVisibleRef = useRef(true)
 
   useEffect(() => {
     selectedRef.current = selectedId
@@ -62,22 +64,30 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
     const container = containerRef.current
     if (!container) return
 
+    // Bail out if WebGL is unavailable
+    const testCanvas = document.createElement('canvas')
+    const gl = testCanvas.getContext('webgl2') || testCanvas.getContext('webgl')
+    if (!gl) {
+      container.innerHTML = '<div class="webgl-error">WebGL is not available in this browser</div>'
+      return
+    }
+
     const renderer = new THREE.WebGLRenderer({
-      antialias: true,
+      antialias: false, // disabled for perf
       alpha: true,
-      powerPreference: 'high-performance',
+      powerPreference: 'low-power',
     })
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setPixelRatio(1) // Cap at 1x for perf
     renderer.setSize(container.clientWidth, container.clientHeight)
     renderer.setClearColor(PALETTE.void, 1)
     container.appendChild(renderer.domElement)
     renderer.domElement.style.cursor = 'grab'
 
     const scene = new THREE.Scene()
-    scene.fog = new THREE.FogExp2(PALETTE.void, 0.0008)
+    scene.fog = new THREE.FogExp2(PALETTE.void, 0.0012)
 
     const camera = new THREE.PerspectiveCamera(
-      45,
+      50,
       container.clientWidth / container.clientHeight,
       1,
       5000
@@ -85,29 +95,21 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
     camera.position.set(0, 0, 800)
     camera.lookAt(0, 0, 0)
 
-    // Lighting
-    const ambient = new THREE.AmbientLight(PALETTE.ink, 0.4)
+    // Lighting (cheaper: just ambient + one directional)
+    const ambient = new THREE.AmbientLight(PALETTE.ink, 0.6)
     scene.add(ambient)
-
-    const key = new THREE.DirectionalLight(PALETTE.gold, 0.9)
+    const key = new THREE.DirectionalLight(PALETTE.gold, 0.8)
     key.position.set(200, 300, 400)
     scene.add(key)
-
-    const fill = new THREE.DirectionalLight(PALETTE.azure, 0.4)
-    fill.position.set(-300, -100, 200)
-    scene.add(fill)
-
-    const rim = new THREE.PointLight(PALETTE.copper, 0.6, 1500)
-    rim.position.set(0, 0, -200)
-    scene.add(rim)
 
     // Compute layout
     const { positions } = computeLayout(chart)
 
-    // Build edges as line segments
+    // Build edges as a single line segments mesh
     const edgeGeometry = new THREE.BufferGeometry()
-    const edgePositions = new Float32Array(chart.edges.length * 6) // 2 vertices × 3
-    const edgeColors = new Float32Array(chart.edges.length * 6)
+    const edgeCount = chart.edges.length
+    const edgePositions = new Float32Array(edgeCount * 6)
+    const edgeColors = new Float32Array(edgeCount * 6)
     let ei = 0
     for (const e of chart.edges) {
       const a = positions.get(e.source)
@@ -135,100 +137,107 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
     const edgeMaterial = new THREE.LineBasicMaterial({
       vertexColors: true,
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.4,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
     const edgeLines = new THREE.LineSegments(edgeGeometry, edgeMaterial)
     scene.add(edgeLines)
 
-    // Build nodes
-    const group = new THREE.Group()
+    // Build nodes (limit count, simplify)
     const nodeMeshes = new Map<number, THREE.Mesh>()
     const nodeRings = new Map<number, THREE.Mesh>()
     const halos = new Map<number, THREE.Mesh>()
     const labels = new Map<number, THREE.Sprite>()
+
+    // Cap node visual complexity based on count
+    const totalNodes = chart.nodes.length
+    const showLabels = totalNodes <= 80
+    const showHalos = totalNodes <= 60
+    const ringDetail = totalNodes > 100 ? 16 : 32 // lower ring segments for big graphs
 
     for (const node of chart.nodes) {
       const p = positions.get(node.id)
       if (!p) continue
 
       const importance = Math.min(1, Math.sqrt(node.inbound + node.outbound) / 6)
-      const r = 4 + importance * 14
+      const r = 4 + importance * 10
 
-      // Core sphere
-      const geometry = new THREE.SphereGeometry(r, 24, 24)
+      // Core sphere (lower poly for perf)
+      const geometry = new THREE.SphereGeometry(r, 12, 12)
       const isNew = newIds.has(node.id)
       const baseColor = isNew ? PALETTE.goldBright : PALETTE.ink
       const material = new THREE.MeshStandardMaterial({
         color: baseColor,
-        metalness: 0.4,
-        roughness: 0.3,
+        metalness: 0.3,
+        roughness: 0.4,
         emissive: isNew ? PALETTE.gold : PALETTE.ink,
-        emissiveIntensity: isNew ? 0.6 : 0.15,
+        emissiveIntensity: isNew ? 0.6 : 0.12,
       })
       const mesh = new THREE.Mesh(geometry, material)
       mesh.position.set(p.x, p.y, p.z)
       mesh.userData = { id: node.id, name: node.name, kind: node.kind, radius: r }
       nodeMeshes.set(node.id, mesh)
-      group.add(mesh)
+      scene.add(mesh)
 
-      // Outer ring
-      const ringGeo = new THREE.TorusGeometry(r * 2.2, 0.4, 8, 48)
+      // Outer ring (always present, important for constellation look)
+      const ringGeo = new THREE.TorusGeometry(r * 2, 0.3, 6, ringDetail)
       const ringMat = new THREE.MeshBasicMaterial({
         color: PALETTE.gold,
         transparent: true,
-        opacity: isNew ? 0.8 : 0.3,
+        opacity: isNew ? 0.7 : 0.25,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       })
       const ring = new THREE.Mesh(ringGeo, ringMat)
       ring.position.copy(mesh.position)
-      ring.lookAt(camera.position)
+      // Face the camera roughly (just rotate around Z for billboarding)
+      ring.rotation.x = Math.PI / 2
       nodeRings.set(node.id, ring)
-      group.add(ring)
+      scene.add(ring)
 
-      // Halo for important nodes
-      if (importance > 0.5) {
-        const haloGeo = new THREE.SphereGeometry(r * 3, 16, 16)
+      // Halo only for important nodes (saves draw calls)
+      if (showHalos && importance > 0.6) {
+        const haloGeo = new THREE.SphereGeometry(r * 2.5, 10, 10)
         const haloMat = new THREE.MeshBasicMaterial({
           color: PALETTE.gold,
           transparent: true,
-          opacity: 0.08,
+          opacity: 0.06,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
         })
         const halo = new THREE.Mesh(haloGeo, haloMat)
         halo.position.copy(mesh.position)
         halos.set(node.id, halo)
-        group.add(halo)
+        scene.add(halo)
       }
 
-      // Label sprite for prominent or new nodes
-      if (importance > 0.4 || isNew) {
+      // Labels only for small graphs (sprites are expensive)
+      if (showLabels && (importance > 0.5 || isNew)) {
         const sprite = makeLabel(node.name)
         sprite.position.set(p.x, p.y - r * 2.5, p.z)
         labels.set(node.id, sprite)
-        group.add(sprite)
+        scene.add(sprite)
       }
     }
-    scene.add(group)
 
-    // Particle field background
-    const particleCount = 1200
+    // Particle field (much smaller, drift only on Y, cheap)
+    const particleCount = MAX_PARTICLES
     const particleGeo = new THREE.BufferGeometry()
     const particlePositions = new Float32Array(particleCount * 3)
+    const particleSpeeds = new Float32Array(particleCount)
     for (let i = 0; i < particleCount; i++) {
-      particlePositions[i * 3] = (Math.random() - 0.5) * 2000
-      particlePositions[i * 3 + 1] = (Math.random() - 0.5) * 2000
-      particlePositions[i * 3 + 2] = (Math.random() - 0.5) * 2000
+      particlePositions[i * 3] = (Math.random() - 0.5) * 1500
+      particlePositions[i * 3 + 1] = (Math.random() - 0.5) * 1500
+      particlePositions[i * 3 + 2] = (Math.random() - 0.5) * 1500
+      particleSpeeds[i] = 0.5 + Math.random() * 1.5
     }
     particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3))
     const particleMat = new THREE.PointsMaterial({
       color: PALETTE.inkDim,
-      size: 1.5,
+      size: 1.2,
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.4,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
@@ -237,11 +246,14 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
 
     const raycaster = new THREE.Raycaster()
     const pointer = new THREE.Vector2()
+    const cameraTarget = new THREE.Vector3(0, 0, 0)
+    const cameraPos = new THREE.Vector3(0, 0, 800)
 
     const sceneData: Scene3D = {
-      renderer, scene, camera, group,
+      renderer, scene, camera,
       nodeMeshes, nodeRings, edgeLines, particleField,
       halos, labels, raycaster, pointer,
+      cameraTarget, cameraPos,
     }
     sceneRef.current = sceneData
 
@@ -258,9 +270,15 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
     const ro = new ResizeObserver(onResize)
     ro.observe(container)
 
+    // Visibility API - pause when tab is hidden
+    const onVisibilityChange = () => {
+      isVisibleRef.current = !document.hidden
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
     // Camera orbit (idle drift)
     let cameraAngle = 0
-    const clock = new THREE.Clock()
+    let lastFrameTime = performance.now()
 
     // Mouse / touch interaction
     let dragging = false
@@ -293,8 +311,8 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
         const dx = e.clientX - lastX
         const dy = e.clientY - lastY
         if (Math.abs(dx) + Math.abs(dy) > 2) moved = true
-        cameraTargetRef.current.x -= dx * 1.4
-        cameraTargetRef.current.y += dy * 1.4
+        cameraTarget.x -= dx * 1.4
+        cameraTarget.y += dy * 1.4
         lastX = e.clientX
         lastY = e.clientY
       } else {
@@ -321,8 +339,8 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
       isUserInteractingRef.current = true
       idleTimeRef.current = 0
       const factor = Math.exp(-e.deltaY * 0.0008)
-      const newDist = Math.max(200, Math.min(2500, cameraPosRef.current.length() * factor))
-      cameraPosRef.current.setLength(newDist)
+      const newDist = Math.max(200, Math.min(2500, cameraPos.length() * factor))
+      cameraPos.setLength(newDist)
     }
 
     renderer.domElement.addEventListener('pointerdown', onPointerDown)
@@ -330,45 +348,53 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
     renderer.domElement.addEventListener('pointerup', onPointerUp)
     renderer.domElement.addEventListener('wheel', onWheel, { passive: false })
 
-    // Auto-orbit when idle
+    // FPS-throttled animation loop
     let frameId = 0
     const animate3D = () => {
       frameId = requestAnimationFrame(animate3D)
-      const delta = clock.getDelta()
 
+      // Skip frame if tab is hidden
+      if (!isVisibleRef.current) return
+
+      // Throttle to TARGET_FPS
+      const now = performance.now()
+      const elapsed = now - lastFrameTime
+      if (elapsed < FRAME_INTERVAL) return
+      lastFrameTime = now - (elapsed % FRAME_INTERVAL)
+      const delta = Math.min(elapsed / 1000, 0.1) // cap delta
+
+      // Camera orbit when idle
       if (!isUserInteractingRef.current) {
         idleTimeRef.current += delta
-        // Start gentle orbit after 2s of idle
-        if (idleTimeRef.current > 2) {
-          cameraAngle += delta * 0.05
-          const radius = cameraPosRef.current.length()
+        if (idleTimeRef.current > 3) {
+          cameraAngle += delta * 0.04
+          const radius = cameraPos.length()
           const targetX = Math.cos(cameraAngle) * radius
           const targetZ = Math.sin(cameraAngle) * radius
-          cameraPosRef.current.x += (targetX - cameraPosRef.current.x) * 0.02
-          cameraPosRef.current.z += (targetZ - cameraPosRef.current.z) * 0.02
+          cameraPos.x += (targetX - cameraPos.x) * 0.04
+          cameraPos.z += (targetZ - cameraPos.z) * 0.04
         }
       } else {
         idleTimeRef.current = 0
       }
 
       // Smooth camera follow
-      camera.position.lerp(cameraPosRef.current, 0.08)
-      camera.lookAt(cameraTargetRef.current)
+      camera.position.lerp(cameraPos, 0.1)
+      camera.lookAt(cameraTarget)
 
-      // Animate particles
+      // Animate particles (Y drift only, every other frame would be even cheaper)
       const pAttr = particleField.geometry.attributes.position as THREE.BufferAttribute
       const arr = pAttr.array as Float32Array
       for (let i = 0; i < arr.length; i += 3) {
-        arr[i + 1] += delta * 4
+        const speed = particleSpeeds[i / 3]
+        arr[i + 1] += delta * speed * 4
         if (arr[i + 1] > 1000) arr[i + 1] = -1000
       }
       pAttr.needsUpdate = true
-      particleField.rotation.y += delta * 0.01
 
-      // Animate rings (rotate to face camera roughly)
+      // Subtle ring spin (cheap: just z rotation, no lookAt)
       for (const ring of nodeRings.values()) {
-        ring.lookAt(camera.position)
-        ring.rotation.z += delta * 0.2
+        ring.rotation.z += delta * 0.15
       }
 
       renderer.render(scene, camera)
@@ -385,6 +411,7 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
     return () => {
       cancelAnimationFrame(frameId)
       ro.disconnect()
+      document.removeEventListener('visibilitychange', onVisibilityChange)
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       renderer.domElement.removeEventListener('pointermove', onPointerMove)
       renderer.domElement.removeEventListener('pointerup', onPointerUp)
@@ -415,23 +442,20 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
 }
 
 function computeLayout(chart: CodeChart): { positions: Map<number, THREE.Vector3> } {
-  // Use d3-force layout for graph positioning, then map to 3D
   const { simulation } = startLayout(chart)
   const positions = new Map<number, THREE.Vector3>()
 
-  // Run simulation synchronously to a settled state
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < FORCE_TICKS; i++) {
     simulation.tick()
   }
 
-  // Map module "seas" to z-depth so multiple modules form a 3D constellation
   const modules = [...new Set(chart.nodes.map((n) => n.module))]
   const moduleDepth = new Map<string, number>()
   modules.forEach((m, i) => {
     if (modules.length === 1) {
       moduleDepth.set(m, 0)
     } else {
-      moduleDepth.set(m, (i - modules.length / 2) * 220)
+      moduleDepth.set(m, (i - modules.length / 2) * 180)
     }
   })
 
@@ -444,21 +468,20 @@ function computeLayout(chart: CodeChart): { positions: Map<number, THREE.Vector3
 
 function makeLabel(text: string): THREE.Sprite {
   const canvas = document.createElement('canvas')
-  const dpr = 2
-  const fontSize = 32
-  canvas.width = 512
-  canvas.height = 64
+  const dpr = 1
+  const fontSize = 28
+  canvas.width = 256
+  canvas.height = 32
   const ctx = canvas.getContext('2d')!
   ctx.scale(dpr, dpr)
   ctx.font = `500 ${fontSize}px 'IBM Plex Mono', monospace`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  // Halo
-  ctx.fillStyle = 'rgba(5, 6, 10, 0.85)'
-  ctx.fillText(text, 128, 32)
-  // Text
+  // Halo for readability
+  ctx.fillStyle = 'rgba(5, 6, 10, 0.9)'
+  ctx.fillText(text, 128, 16)
   ctx.fillStyle = '#d4a857'
-  ctx.fillText(text, 128, 32)
+  ctx.fillText(text, 128, 16)
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
@@ -466,57 +489,39 @@ function makeLabel(text: string): THREE.Sprite {
     map: texture,
     transparent: true,
     depthTest: false,
-    blending: THREE.NormalBlending,
   })
   const sprite = new THREE.Sprite(material)
-  sprite.scale.set(80, 16, 1)
+  sprite.scale.set(60, 12, 1)
   return sprite
 }
 
 function animateEntrance(scene: Scene3D, newIds: Set<number>) {
   const meshes = [...scene.nodeMeshes.values()]
-  const rings = [...scene.nodeRings.values()]
 
-  // Stagger fade-in by node id for a wave effect
   meshes.sort((a, b) => (a.userData.id as number) - (b.userData.id as number))
-  const tl = createTimeline({ defaults: { ease: 'outExpo', duration: 1400 } })
+  const tl = createTimeline({ defaults: { ease: 'outExpo', duration: 1000 } })
   meshes.forEach((mesh, i) => {
-    const start = (i / meshes.length) * 1.2
+    const start = (i / Math.max(meshes.length, 1)) * 0.8
     mesh.scale.setScalar(0.001)
     tl.add(mesh.scale, {
       to: 1,
-      duration: 1100,
+      duration: 800,
       delay: start * 1000,
-      ease: 'outElastic(1, .8)',
+      ease: 'outBack(2)',
     }, 0)
   })
 
-  // Edge lines fade in
   const edgeMat = scene.edgeLines.material as THREE.LineBasicMaterial
   edgeMat.opacity = 0
-  animate(edgeMat, { opacity: 0.5, delay: 800, duration: 1800, ease: 'outQuart' })
+  animate(edgeMat, { opacity: 0.4, delay: 500, duration: 1400, ease: 'outQuart' })
 
-  // Rings pulse on entrance
-  rings.forEach((ring, i) => {
-    const baseScale = 1
-    const s = ring.scale.x
-    ring.scale.setScalar(s * 0.4)
-    animate(ring.scale, {
-      to: baseScale,
-      delay: 1200 + i * 8,
-      duration: 1400,
-      ease: 'outBack(1.5)',
-    })
-  })
-
-  // New nodes get a special entrance flash
   for (const [id, mesh] of scene.nodeMeshes) {
     if (newIds.has(id)) {
       const mat = mesh.material as THREE.MeshStandardMaterial
       animate(mat, {
         emissiveIntensity: [0, 2, 0.6],
-        delay: 1800,
-        duration: 1600,
+        delay: 1400,
+        duration: 1400,
         ease: 'inOutQuad',
       })
     }
@@ -524,44 +529,43 @@ function animateEntrance(scene: Scene3D, newIds: Set<number>) {
 }
 
 function applyHover(scene: Scene3D, node: ChartNode | null, selectedId: number | null) {
-  // Animate ring opacity/scale based on hover/selection state
   for (const [id, ring] of scene.nodeRings) {
     const isHovered = node?.id === id
     const isSelected = selectedId === id
     const mat = ring.material as THREE.MeshBasicMaterial
     animate(mat, {
-      opacity: isHovered ? 1 : isSelected ? 0.8 : 0.3,
-      duration: 320,
+      opacity: isHovered ? 0.9 : isSelected ? 0.7 : 0.25,
+      duration: 280,
       ease: 'outQuad',
     })
     animate(ring.scale, {
-      to: isHovered ? 1.5 : 1,
-      duration: 380,
+      to: isHovered ? 1.4 : 1,
+      duration: 320,
       ease: 'outElastic(1, .6)',
     })
   }
 
-  // Dim edges when hovering (a selection cue)
   const dim = node != null
   const edgeMat = scene.edgeLines.material as THREE.LineBasicMaterial
   animate(edgeMat, {
-    opacity: dim ? 0.18 : 0.5,
-    duration: 400,
+    opacity: dim ? 0.15 : 0.4,
+    duration: 320,
     ease: 'outQuad',
   })
 }
 
 function highlightSelection(scene: Scene3D, selectedId: number | null) {
-  // Animate emissive of every node: gold for selected, dim ink for others
   for (const [id, mesh] of scene.nodeMeshes) {
     const mat = mesh.material as THREE.MeshStandardMaterial
     const isSelected = id === selectedId
-    const targetHex = isSelected ? '#' + PALETTE.goldBright.toString(16).padStart(6, '0') : '#' + PALETTE.ink.toString(16).padStart(6, '0')
+    const targetHex = isSelected
+      ? '#' + PALETTE.goldBright.toString(16).padStart(6, '0')
+      : '#' + PALETTE.ink.toString(16).padStart(6, '0')
     const currentHex = '#' + mat.emissive.getHex().toString(16).padStart(6, '0')
     animate(mat, {
       emissive: { from: currentHex, to: targetHex },
-      emissiveIntensity: isSelected ? 1.2 : 0.15,
-      duration: 600,
+      emissiveIntensity: isSelected ? 1.0 : 0.12,
+      duration: 480,
       ease: 'outQuart',
     })
   }
