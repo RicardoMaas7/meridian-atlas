@@ -579,3 +579,58 @@ button.text-btn.watch-on {
 .observation-refs .sep {
   color: var(--ink-faint);
 }
+
+/* ---------- Language selector ---------- */
+
+.top-controls {
+  position: fixed;
+  top: 16px;
+  right: 20px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lang-selector {
+  display: flex;
+  gap: 4px;
+  background: var(--paper);
+  padding: 4px 8px;
+  border: 1px solid var(--ink-hairline);
+  border-radius: 2px;
+}
+
+.lang-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  cursor: pointer;
+  color: var(--ink-faint);
+  transition: color 0.2s;
+}
+
+.lang-btn:hover {
+  color: var(--ink);
+}
+
+.lang-btn.active {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.platform-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  background: var(--paper);
+  padding: 4px 8px;
+  border: 1px solid var(--ink-hairline);
+  border-radius: 2px;
+  user-select: none;
+}

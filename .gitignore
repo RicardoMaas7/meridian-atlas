@@ -11,7 +11,18 @@ node_modules
 dist
 dist-mcp
 dist-ssr
+coverage
 *.local
+
+# Lock files (keep package-lock.json for npm)
+pnpm-lock.yaml
+pnpm-workspace.yaml
+yarn.lock
+
+# Tauri
+src-tauri/target/
+src-tauri/WixTools/
+src-tauri/gen/schemas/
 
 # Editor directories and files
 .vscode/*

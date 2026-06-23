@@ -21,6 +21,7 @@ import {
 } from '../src/graph/snapshot'
 import { configureLoader } from '../src/parser/loader'
 import { scanDirectory } from './scan'
+import { tryPreciseResolver } from './scip'
 
 // The bundle lives in dist-mcp/; grammars stay in public/wasm. The runtime
 // wasm is left to emscripten, which finds it inside node_modules.
@@ -57,7 +58,7 @@ const charts = new Map<string, CodeChart>()
 async function chartOf(directory: string): Promise<CodeChart> {
   let chart = charts.get(directory)
   if (!chart) {
-    chart = await buildChart(scanDirectory(directory))
+    chart = await buildChart(scanDirectory(directory), undefined, tryPreciseResolver(directory) ?? undefined)
     charts.set(directory, chart)
   }
   return chart
@@ -85,6 +86,9 @@ function renderSurvey(directory: string, chart: CodeChart, prev: SurveySnapshot 
       `Seaworthiness ${grade} (${score})${prev && prev.grade !== grade ? ` — was ${prev.grade}` : ''}. ` +
       `${chart.unresolvedCalls} calls lead off the chart.`,
   )
+  if (chart.precise) {
+    lines.push('Cross-file routes resolved precisely by SCIP — no name guessing.')
+  }
   lines.push('')
 
   if (prev) {
@@ -173,7 +177,7 @@ server.registerTool(
     if (!existsSync(dir)) return fail(`No such directory: ${dir}`)
     const files = scanDirectory(dir)
     if (files.length === 0) return fail(`Nothing to chart in ${dir}: no parseable source files.`)
-    const chart = await buildChart(files)
+    const chart = await buildChart(files, undefined, tryPreciseResolver(dir) ?? undefined)
     charts.set(dir, chart)
     const prev = loadPrevious(dir)
     persist(dir, snapshotOf(chart, dir))

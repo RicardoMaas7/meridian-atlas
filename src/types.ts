@@ -31,6 +31,10 @@ export interface CallRef {
   fromDecl: number
   name: string
   kind: 'name' | 'method' | 'new'
+  /** Call-site position (0-based), so a precise indexer can be asked what it binds to. */
+  file: string
+  row: number
+  col: number
 }
 
 export interface ChartEdge {
@@ -53,4 +57,6 @@ export interface CodeChart {
   modules: string[]
   fileCount: number
   unresolvedCalls: number
+  /** True when at least one file's cross-file calls were resolved by a precise indexer (SCIP). */
+  precise: boolean
 }

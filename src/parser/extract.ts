@@ -91,6 +91,9 @@ export async function extractFile(
       fromDecl: owner.id,
       name: capture.node.text,
       kind: capture.name.replace('call.', '') as CallRef['kind'],
+      file: file.path,
+      row: capture.node.startPosition.row,
+      col: capture.node.startPosition.column,
     })
   }
 

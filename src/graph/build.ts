@@ -1,11 +1,13 @@
 import type { CallRef, ChartEdge, ChartNode, CodeChart, Decl, FileEntry } from '../types'
 import { extractFile } from '../parser/extract'
+import type { PreciseResolver } from './scip'
 
 const MAX_DASHED_CANDIDATES = 3
 
 export async function buildChart(
   files: FileEntry[],
   onProgress?: (done: number, total: number) => void,
+  precise?: PreciseResolver,
 ): Promise<CodeChart> {
   let counter = 0
   const nextId = () => counter++
@@ -39,6 +41,21 @@ export async function buildChart(
   }
 
   const declById = new Map(decls.map((d) => [d.id, d]))
+  // `${file}:${row}` → declarations whose name token sits there, for mapping a
+  // SCIP definition site back to the symbol we drew.
+  const declByLoc = new Map<string, Decl[]>()
+  for (const d of decls) {
+    const key = `${d.file}:${d.row}`
+    let list = declByLoc.get(key)
+    if (!list) declByLoc.set(key, (list = []))
+    list.push(d)
+  }
+  const declAt = (file: string, row: number, name: string): Decl | undefined => {
+    const list = declByLoc.get(`${file}:${row}`)
+    if (!list) return undefined
+    return list.find((d) => d.name === name) ?? list[0]
+  }
+
   const edgeKeys = new Set<string>()
   const edges: ChartEdge[] = []
   let unresolved = 0
@@ -54,6 +71,17 @@ export async function buildChart(
   for (const call of calls) {
     const from = declById.get(call.fromDecl)
     if (!from) continue
+
+    // 0. Precise: when a SCIP index covers this file, it knows exactly which
+    // definition the call binds to. Authoritative — no name guessing, and a
+    // miss means the call leaves the project (external/builtin), not a dash.
+    if (precise?.covers(call.file)) {
+      const target = precise.resolve(call.file, call.row, call.col, call.name)
+      const targetDecl = target && declAt(target.file, target.row, call.name)
+      if (targetDecl) addEdge(from.id, targetDecl.id, true)
+      else unresolved++
+      continue
+    }
 
     // 1. Same file: a charted route.
     const local = byFile.get(from.file)?.get(call.name)
@@ -98,5 +126,13 @@ export async function buildChart(
   }))
 
   const modules = [...new Set(nodes.map((n) => n.module))].sort()
-  return { nodes, edges, modules, fileCount: files.length, unresolvedCalls: unresolved }
+  const preciseUsed = !!precise && files.some((f) => precise.covers(f.path))
+  return {
+    nodes,
+    edges,
+    modules,
+    fileCount: files.length,
+    unresolvedCalls: unresolved,
+    precise: preciseUsed,
+  }
 }

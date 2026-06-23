@@ -15,6 +15,10 @@ import type { SurveyDelta } from '../graph/snapshot'
 import { SPECIMEN_FILES, SPECIMEN_NAME } from '../demo/specimen'
 import { ChartCanvas } from './ChartCanvas'
 import { SidePanel } from './SidePanel'
+import { LanguageSelector } from './LanguageSelector'
+import { useI18n } from '../i18n/context'
+import { tauriAvailable, pickDirectory, scanDirectoryNative } from '../native/fs'
+import { listen } from '@tauri-apps/api/event'
 
 const WATCH_INTERVAL_MS = 15_000
 
@@ -24,14 +28,18 @@ type Phase =
   | { name: 'charted'; chart: CodeChart; title: string; delta: SurveyDelta | null }
 
 export function App() {
+  const { t } = useI18n()
   const [phase, setPhase] = useState<Phase>({ name: 'landing' })
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [watching, setWatching] = useState(false)
   const [canWatch, setCanWatch] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dirHandleRef = useRef<FileSystemDirectoryHandle | null>(null)
+  const nativeDirRef = useRef<string | null>(null)
   const phaseRef = useRef(phase)
   const surveyingRef = useRef(false)
+  const isNative = tauriAvailable()
+
   useEffect(() => {
     phaseRef.current = phase
   })
@@ -41,7 +49,7 @@ export function App() {
       if (files.length === 0) {
         if (!silent) {
           setPhase({ name: 'landing' })
-          alert('No supported source files found in that folder.')
+          alert(t.labels.noSupportedFiles)
         }
         return
       }
@@ -50,14 +58,13 @@ export function App() {
         silent
           ? undefined
           : (done, total) =>
-              setPhase({ name: 'surveying', detail: `Taking soundings… ${done}/${total} files` }),
+              setPhase({ name: 'surveying', detail: `${t.labels.takingSoundings} ${done}/${total} files` }),
       )
 
       const previous = loadPrevious(title)
       const delta = previous ? diffAgainst(previous, chart) : null
       persist(snapshotOf(chart, title))
 
-      // Keep the same symbol selected across re-surveys.
       const current = phaseRef.current
       if (current.name === 'charted' && silent) {
         setSelectedId((sel) => {
@@ -71,14 +78,14 @@ export function App() {
       }
       setPhase({ name: 'charted', chart, title, delta })
     },
-    [],
+    [t],
   )
 
   const runSurvey = useCallback(
     async (filesPromise: Promise<FileEntry[]>, title: string, silent = false) => {
       if (surveyingRef.current) return
       surveyingRef.current = true
-      if (!silent) setPhase({ name: 'surveying', detail: 'Reading the coastline…' })
+      if (!silent) setPhase({ name: 'surveying', detail: t.labels.readingCoastline })
       try {
         await survey(await filesPromise, title, silent)
       } catch (err) {
@@ -88,16 +95,30 @@ export function App() {
         surveyingRef.current = false
       }
     },
-    [survey],
+    [survey, t],
   )
 
   const openFolder = useCallback(async () => {
-    if ('showDirectoryPicker' in window) {
+    if (isNative) {
+      try {
+        const path = await pickDirectory()
+        if (!path) return
+        nativeDirRef.current = path
+        dirHandleRef.current = null
+        setCanWatch(true)
+        setWatching(false)
+        const folderName = path.split(/[\\/]/).filter(Boolean).pop() ?? path
+        void runSurvey(scanDirectoryNative(path), folderName)
+      } catch (err) {
+        console.error('Failed to open directory:', err)
+      }
+    } else if ('showDirectoryPicker' in window) {
       try {
         const dir = await (
           window as unknown as { showDirectoryPicker: () => Promise<FileSystemDirectoryHandle> }
         ).showDirectoryPicker()
         dirHandleRef.current = dir
+        nativeDirRef.current = null
         setCanWatch(true)
         setWatching(false)
         void runSurvey(scanDirectoryHandle(dir), dir.name)
@@ -107,7 +128,7 @@ export function App() {
     } else {
       fileInputRef.current?.click()
     }
-  }, [runSurvey])
+  }, [runSurvey, isNative])
 
   const onFallbackFiles = useCallback(
     (list: FileList | null) => {
@@ -115,6 +136,7 @@ export function App() {
       const first = list[0] as File & { webkitRelativePath?: string }
       const root = first.webkitRelativePath?.split('/')[0] ?? 'Local folder'
       dirHandleRef.current = null
+      nativeDirRef.current = null
       setCanWatch(false)
       setWatching(false)
       void runSurvey(scanFileList(list), root)
@@ -130,18 +152,45 @@ export function App() {
   }, [runSurvey])
 
   const resurvey = useCallback(() => {
-    const dir = dirHandleRef.current
     const current = phaseRef.current
-    if (!dir || current.name !== 'charted') return
-    void runSurvey(scanDirectoryHandle(dir), current.title, true)
+    if (current.name !== 'charted') return
+    if (nativeDirRef.current) {
+      void runSurvey(scanDirectoryNative(nativeDirRef.current), current.title, true)
+    } else if (dirHandleRef.current) {
+      void runSurvey(scanDirectoryHandle(dirHandleRef.current), current.title, true)
+    }
   }, [runSurvey])
 
-  // Standing watch: re-survey the open folder on an interval.
   useEffect(() => {
     if (!watching) return
     const timer = setInterval(resurvey, WATCH_INTERVAL_MS)
     return () => clearInterval(timer)
   }, [watching, resurvey])
+
+  // Listen for native menu events from Tauri
+  useEffect(() => {
+    if (!isNative) return
+    let unlisten: (() => void) | undefined
+    listen<string>('menu', (event) => {
+      const action = event.payload
+      if (action === 'open_folder') {
+        void openFolder()
+      } else if (action === 'view_specimen') {
+        openSpecimen()
+      } else if (action === 'new_chart') {
+        setPhase({ name: 'landing' })
+      } else if (action === 'resurvey') {
+        resurvey()
+      } else if (action === 'about') {
+        alert(`${t.labels.title}\nA navigational chart of your code.\nNative desktop app.`)
+      }
+    }).then((fn) => {
+      unlisten = fn
+    })
+    return () => {
+      unlisten?.()
+    }
+  }, [isNative, t.labels.title, openFolder, openSpecimen, resurvey])
 
   return (
     <div className="sheet">
@@ -149,6 +198,7 @@ export function App() {
       <div className="frame-scale bottom" />
       <div className="frame-scale left" />
       <div className="frame-scale right" />
+      <LanguageSelector />
       <input
         ref={fileInputRef}
         type="file"
@@ -162,21 +212,17 @@ export function App() {
       {phase.name !== 'charted' && (
         <div className="landing">
           <div className="cartouche">
-            <p className="cartouche-kicker">A survey of source code</p>
-            <h1>Meridian</h1>
-            <p className="subtitle">A navigational chart of your code</p>
-            <p className="pledge">
-              Open a folder. Every function is drawn as a mark, every call as a
-              route. <strong>Everything runs in your browser. Nothing leaves
-              your machine.</strong>
-            </p>
+            <p className="cartouche-kicker">{t.labels.kicker}</p>
+            <h1>{t.labels.title}</h1>
+            <p className="subtitle">{t.labels.subtitle}</p>
+            <p className="pledge">{t.labels.pledge}</p>
             {phase.name === 'landing' ? (
               <div className="actions">
                 <button className="chart-btn" onClick={openFolder}>
-                  Chart a folder
+                  {t.labels.chartFolder}
                 </button>
                 <button className="text-btn" onClick={openSpecimen}>
-                  View specimen
+                  {t.labels.viewSpecimen}
                 </button>
               </div>
             ) : (
@@ -184,8 +230,8 @@ export function App() {
             )}
           </div>
           <p className="landing-foot">
-            {SUPPORTED_LANGS_LABEL} · soundings given in number of calls ·{' '}
-            <a href="https://github.com/RicardoMaas7/meridian">source</a>
+            {SUPPORTED_LANGS_LABEL} · {t.labels.landingFoot} ·{' '}
+            <a href="https://github.com/RicardoMaas7/meridian">{t.labels.sourceLink}</a>
           </p>
         </div>
       )}
@@ -200,26 +246,26 @@ export function App() {
               onSelect={setSelectedId}
             />
             <div className="chart-titleblock">
-              <p className="titleblock-kicker">Meridian survey of</p>
+              <p className="titleblock-kicker">{t.labels.surveyOf}</p>
               <h2>{phase.title}</h2>
               <p className="survey-line">
-                <em>{phase.chart.nodes.length}</em> symbols ·{' '}
-                <em>{phase.chart.edges.length}</em> routes ·{' '}
-                <em>{phase.chart.fileCount}</em> files
+                <em>{phase.chart.nodes.length}</em> {t.labels.symbols} ·{' '}
+                <em>{phase.chart.edges.length}</em> {t.labels.routes} ·{' '}
+                <em>{phase.chart.fileCount}</em> {t.labels.files}
               </p>
               <p className="survey-line">
-                seaworthiness <em>{gradeChart(phase.chart).grade}</em>
+                {t.labels.seaworthiness} <em>{gradeChart(phase.chart).grade}</em>
                 {phase.delta && phase.delta.prevGrade !== gradeChart(phase.chart).grade && (
-                  <span className="grade-was"> (was {phase.delta.prevGrade})</span>
+                  <span className="grade-was"> ({t.labels.was} {phase.delta.prevGrade})</span>
                 )}
               </p>
               <div className="titleblock-actions">
                 <button className="text-btn" onClick={() => setPhase({ name: 'landing' })}>
-                  New chart
+                  {t.labels.newChart}
                 </button>
                 {canWatch && (
                   <button className="text-btn" onClick={resurvey}>
-                    Re-survey
+                    {t.labels.resurvey}
                   </button>
                 )}
                 {canWatch && (
@@ -227,30 +273,30 @@ export function App() {
                     className={`text-btn ${watching ? 'watch-on' : ''}`}
                     onClick={() => setWatching((value) => !value)}
                   >
-                    {watching ? 'Standing watch' : 'Keep watch'}
+                    {watching ? t.labels.standingWatch : t.labels.keepWatch}
                   </button>
                 )}
               </div>
             </div>
             <div className="chart-legend">
-              <div className="legend-title">Legend</div>
+              <div className="legend-title">{t.labels.legend}</div>
               <div className="legend-row">
-                <span className="legend-swatch" /> charted route (resolved call)
+                <span className="legend-swatch" /> {t.labels.chartedRoute}
               </div>
               <div className="legend-row">
-                <span className="legend-swatch dashed" /> estimated route (by name)
+                <span className="legend-swatch dashed" /> {t.labels.estimatedRoute}
               </div>
               <div className="legend-row">
-                <span className="legend-glyph">›</span> arrow = direction of the call
+                <span className="legend-glyph">›</span> {t.labels.arrowDirection}
               </div>
               <div className="legend-row">
-                <span className="legend-swatch sounding" /> symbol · size = times called
+                <span className="legend-swatch sounding" /> {t.labels.symbolSize}
               </div>
               <div className="legend-row">
-                <span className="legend-glyph">+</span> rock = never called, calls nothing
+                <span className="legend-glyph">+</span> {t.labels.rock}
               </div>
               <div className="legend-row">
-                <span className="legend-swatch sounding new" /> filled = new since last survey
+                <span className="legend-swatch sounding new" /> {t.labels.filledNew}
               </div>
             </div>
           </div>
