@@ -12,6 +12,8 @@ interface Props {
   hideRocks?: boolean
   newOnly?: boolean
   searchMatch?: Set<number>
+  focusId?: number | null
+  focusZoom?: number
 }
 
 const PALETTE = {
@@ -85,6 +87,8 @@ export function ChartCanvas({
   hideRocks = false,
   newOnly = false,
   searchMatch,
+  focusId,
+  focusZoom,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -270,6 +274,43 @@ export function ChartCanvas({
     }
     setMounted(true)
   }, [bounds])
+
+  // Animate the viewBox to a focused node when focusId changes.
+  useEffect(() => {
+    if (focusId == null) return
+    const target = nodeMap.get(focusId)
+    if (!target) return
+    const container = containerRef.current
+    if (!container) return
+    const rect = container.getBoundingClientRect()
+    const aspect = rect.width / rect.height
+    const targetSize = focusZoom ?? 220
+    const size = Math.max(targetSize, 80)
+    const cx = target.x
+    const cy = target.y
+    const minX = aspect >= 1 ? cx - size / 2 : cx - size * aspect / 2
+    const minY = aspect >= 1 ? cy - size / (2 * aspect) : cy - size / 2
+    const start = viewRef.current
+    const end = { minX, minY, size }
+    const duration = 700
+    const startTime = performance.now()
+    let raf = 0
+    const animateView = (now: number) => {
+      const t = Math.min(1, (now - startTime) / duration)
+      const e = 1 - Math.pow(1 - t, 3) // easeOutCubic
+      const v = {
+        minX: start.minX + (end.minX - start.minX) * e,
+        minY: start.minY + (end.minY - start.minY) * e,
+        size: start.size + (end.size - start.size) * e,
+      }
+      viewRef.current = v
+      const svg = svgRef.current
+      if (svg) svg.setAttribute('viewBox', `${v.minX} ${v.minY} ${v.size} ${v.size}`)
+      if (t < 1) raf = requestAnimationFrame(animateView)
+    }
+    raf = requestAnimationFrame(animateView)
+    return () => cancelAnimationFrame(raf)
+  }, [focusId, focusZoom, nodeMap])
 
   useEffect(() => {
     const svg = svgRef.current

@@ -384,7 +384,7 @@ body {
   z-index: 10;
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 360px;
+  grid-template-columns: 1fr 420px;
   height: 100%;
 }
 
@@ -412,32 +412,82 @@ body {
   overflow: hidden;
 }
 
-.chart-canvas-2d:active {
-  cursor: grabbing;
-}
-
 .chart-canvas-2d::before {
   content: "";
   position: absolute;
   inset: 0;
-  background-image:
-    radial-gradient(1px 1px at 20% 30%, rgba(239, 231, 211, 0.45), transparent),
-    radial-gradient(1px 1px at 75% 20%, rgba(242, 207, 128, 0.55), transparent),
-    radial-gradient(1px 1px at 40% 70%, rgba(239, 231, 211, 0.4), transparent),
-    radial-gradient(1.5px 1.5px at 60% 50%, rgba(255, 255, 255, 0.5), transparent),
-    radial-gradient(1px 1px at 85% 80%, rgba(142, 182, 255, 0.4), transparent),
-    radial-gradient(1px 1px at 15% 85%, rgba(239, 231, 211, 0.4), transparent),
-    radial-gradient(1px 1px at 50% 15%, rgba(239, 231, 211, 0.5), transparent);
-  background-size: 200% 200%;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.7;
-  animation: driftStars 90s linear infinite;
+  background-image:
+    /* Nebula clouds */
+    radial-gradient(ellipse 320px 180px at 18% 22%, rgba(74, 143, 197, 0.18), transparent 70%),
+    radial-gradient(ellipse 280px 200px at 82% 75%, rgba(200, 120, 86, 0.14), transparent 70%),
+    radial-gradient(ellipse 380px 240px at 55% 45%, rgba(168, 100, 200, 0.1), transparent 70%),
+    /* Distant bright stars */
+    radial-gradient(1.2px 1.2px at 20% 30%, rgba(255, 255, 255, 0.85), transparent),
+    radial-gradient(1.2px 1.2px at 75% 20%, rgba(242, 207, 128, 0.85), transparent),
+    radial-gradient(1.2px 1.2px at 40% 70%, rgba(239, 231, 211, 0.7), transparent),
+    radial-gradient(1.4px 1.4px at 60% 50%, rgba(255, 255, 255, 0.95), transparent),
+    radial-gradient(1.2px 1.2px at 85% 80%, rgba(142, 182, 255, 0.85), transparent),
+    radial-gradient(1.2px 1.2px at 15% 85%, rgba(239, 231, 211, 0.7), transparent),
+    radial-gradient(1.2px 1.2px at 50% 15%, rgba(239, 231, 211, 0.8), transparent),
+    radial-gradient(1.2px 1.2px at 30% 60%, rgba(255, 255, 255, 0.7), transparent),
+    /* Faint dust */
+    radial-gradient(1px 1px at 10% 50%, rgba(239, 231, 211, 0.5), transparent),
+    radial-gradient(1px 1px at 25% 90%, rgba(239, 231, 211, 0.45), transparent),
+    radial-gradient(1px 1px at 70% 35%, rgba(239, 231, 211, 0.5), transparent),
+    radial-gradient(1px 1px at 90% 60%, rgba(239, 231, 211, 0.45), transparent),
+    radial-gradient(1px 1px at 35% 25%, rgba(239, 231, 211, 0.5), transparent),
+    radial-gradient(1px 1px at 65% 90%, rgba(239, 231, 211, 0.4), transparent),
+    radial-gradient(1px 1px at 45% 5%, rgba(239, 231, 211, 0.5), transparent),
+    radial-gradient(1px 1px at 5% 75%, rgba(239, 231, 211, 0.45), transparent),
+    /* Twinkly colored stars */
+    radial-gradient(1.5px 1.5px at 88% 12%, rgba(142, 182, 255, 0.95), transparent),
+    radial-gradient(1.5px 1.5px at 12% 12%, rgba(200, 120, 86, 0.9), transparent),
+    radial-gradient(1.5px 1.5px at 50% 92%, rgba(242, 207, 128, 0.95), transparent);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+  background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0;
+  opacity: 0.85;
+  animation: driftStars 120s linear infinite;
+}
+
+.chart-canvas-2d::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(1px 1px at 8% 8%, rgba(239, 231, 211, 0.4), transparent),
+    radial-gradient(1px 1px at 92% 18%, rgba(239, 231, 211, 0.4), transparent),
+    radial-gradient(1px 1px at 22% 88%, rgba(239, 231, 211, 0.4), transparent),
+    radial-gradient(1px 1px at 78% 78%, rgba(239, 231, 211, 0.4), transparent),
+    radial-gradient(1px 1px at 50% 50%, rgba(239, 231, 211, 0.4), transparent);
+  background-size: 300% 300%;
+  animation: twinkle 8s ease-in-out infinite;
+  opacity: 0.5;
 }
 
 @keyframes driftStars {
-  from { background-position: 0% 0%; }
-  to { background-position: 200% 200%; }
+  from { background-position:
+    0 0, 0 0, 0 0,
+    0 0, 30% 0, 0 0, 70% 20%, 50% 0, 0 30%, 30% 50%, 0 70%,
+    20% 0, 0 20%, 40% 0, 60% 0, 0 40%, 80% 0, 0 60%, 30% 0, 0 30%, 90% 0, 50% 0, 0 0;
+  }
+  to { background-position:
+    100% 100%, 100% 100%, 100% 100%,
+    100% 100%, 130% 100%, 100% 100%, 170% 120%, 150% 100%, 100% 130%, 130% 150%, 100% 170%,
+    120% 100%, 100% 120%, 140% 100%, 160% 100%, 100% 140%, 180% 100%, 100% 160%, 130% 100%, 100% 130%, 190% 100%, 150% 100%, 100% 100%;
+  }
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.6; }
+}
+
+.chart-canvas-2d:active {
+  cursor: grabbing;
 }
 
 .chart-svg {
@@ -707,11 +757,12 @@ body {
 
 .titleblock-kicker {
   font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.32em;
+  font-size: 10.5px;
+  letter-spacing: 0.28em;
   text-transform: uppercase;
   color: var(--gold);
   margin: 0 0 6px 0;
+  font-weight: 500;
 }
 
 .chart-titleblock h2 {
@@ -1020,21 +1071,22 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   font-family: var(--mono);
-  font-size: 11px;
-  color: var(--ink-mid);
+  font-size: 12.5px;
+  color: var(--ink);
 }
 
 .help-row kbd {
   font-family: var(--mono);
-  font-size: 10px;
-  padding: 2px 6px;
+  font-size: 11px;
+  padding: 3px 8px;
   background: rgba(212, 168, 87, 0.1);
   border: 1px solid var(--gold-soft);
   color: var(--gold);
-  min-width: 24px;
+  min-width: 28px;
   text-align: center;
+  font-weight: 500;
 }
 
 /* ---------- Ready hint ---------- */
@@ -1107,78 +1159,130 @@ body {
 
 .tour-spotlight {
   position: absolute;
-  border: 1.5px solid var(--gold-bright);
-  box-shadow: 0 0 0 9999px rgba(5, 6, 10, 0.78), 0 0 30px var(--gold-soft);
-  border-radius: 2px;
+  border: 2px solid var(--gold-bright);
+  box-shadow:
+    0 0 0 9999px rgba(5, 6, 10, 0.78),
+    0 0 30px var(--gold-soft);
+  border-radius: 4px;
   animation: spotlightPulse 2.4s ease-in-out infinite;
   pointer-events: none;
 }
 
 @keyframes spotlightPulse {
-  0%, 100% { box-shadow: 0 0 0 9999px rgba(5, 6, 10, 0.78), 0 0 18px var(--gold-soft); }
-  50% { box-shadow: 0 0 0 9999px rgba(5, 6, 10, 0.74), 0 0 36px var(--gold); }
+  0%, 100% {
+    box-shadow:
+      0 0 0 9999px rgba(5, 6, 10, 0.78),
+      0 0 18px var(--gold-soft);
+    border-color: var(--gold-bright);
+  }
+  50% {
+    box-shadow:
+      0 0 0 9999px rgba(5, 6, 10, 0.72),
+      0 0 42px var(--gold);
+    border-color: var(--gold);
+  }
+}
+
+.tour-pulse {
+  position: absolute;
+  inset: -10px;
+  border: 2px dashed var(--gold-bright);
+  border-radius: 50%;
+  animation: nodePulse 1.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes nodePulse {
+  0% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.15); opacity: 0.95; }
+  100% { transform: scale(1); opacity: 0.6; }
 }
 
 .tour-card-wrapper {
   position: fixed;
-  bottom: 36px;
-  left: 50%;
-  transform: translateX(-50%);
   pointer-events: auto;
   z-index: 251;
-  animation: tourIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: tourIn 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  width: 480px;
+  max-width: calc(100vw - 48px);
 }
 
 @keyframes tourIn {
-  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
-  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+  from { opacity: 0; transform: translateY(14px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .tour-card {
-  width: 480px;
-  max-width: 90vw;
-  background: rgba(10, 12, 20, 0.97);
-  border: 1px solid var(--gold);
-  padding: 22px 26px;
-  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(212, 168, 87, 0.15);
+  background: rgba(10, 12, 20, 0.98);
+  border: 1.5px solid var(--gold);
+  padding: 26px 30px 22px 30px;
+  box-shadow:
+    0 18px 60px rgba(0, 0, 0, 0.8),
+    0 0 36px rgba(212, 168, 87, 0.22);
+  position: relative;
+}
+
+.tour-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold-bright), transparent);
 }
 
 .tour-progress {
   display: flex;
+  align-items: center;
   gap: 6px;
-  margin-bottom: 14px;
+  margin-bottom: 18px;
 }
 
 .tour-dot {
-  width: 16px;
-  height: 2px;
-  background: var(--ink-hairline);
-  transition: background 0.2s;
+  width: 28px;
+  height: 3px;
+  background: rgba(239, 231, 211, 0.18);
+  transition: background 0.25s, width 0.25s;
+  border-radius: 2px;
 }
 
 .tour-dot.past { background: var(--gold-soft); }
-.tour-dot.active { background: var(--gold-bright); }
+.tour-dot.active { background: var(--gold-bright); width: 44px; }
+
+.tour-step-count {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--ink-mid);
+  text-transform: uppercase;
+  font-weight: 500;
+}
 
 .tour-title {
   font-family: var(--display);
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 500;
   color: var(--gold-bright);
-  margin: 0 0 8px 0;
+  margin: 0 0 12px 0;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
 }
 
 .tour-body {
   font-family: var(--serif);
-  font-size: 14px;
-  line-height: 1.55;
-  color: var(--ink-mid);
-  margin: 0 0 16px 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ink);
+  margin: 0 0 22px 0;
 }
 
 .tour-actions {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
 
 .tour-nav {
@@ -1194,6 +1298,7 @@ body {
   border-left: 1px solid var(--ink-hairline);
   padding: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   z-index: 11;
 }
 
@@ -1210,16 +1315,17 @@ body {
 .panel-tabs button {
   flex: 1;
   font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.18em;
+  font-size: 11px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   background: none;
   border: none;
-  padding: 14px 8px;
+  padding: 16px 8px;
   color: var(--ink-dim);
   cursor: pointer;
   border-bottom: 1.5px solid transparent;
   transition: all 0.2s;
+  font-weight: 500;
 }
 
 .panel-tabs button:hover {
@@ -1232,16 +1338,17 @@ body {
 }
 
 .node-detail {
-  padding: 22px 24px;
+  padding: 24px 28px 32px 28px;
 }
 
 .panel-kicker {
   font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.28em;
+  font-size: 10.5px;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
   color: var(--gold);
   margin: 0 0 4px 0;
+  font-weight: 500;
 }
 
 .side-panel h3 {
@@ -1256,7 +1363,7 @@ body {
 
 .position {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--ink-dim);
   margin: 0 0 18px 0;
   display: flex;
@@ -1292,16 +1399,18 @@ body {
 }
 
 .figure.small {
-  font-size: 24px;
+  font-size: 22px;
+  color: var(--azure);
 }
 
 .caption {
   font-family: var(--mono);
-  font-size: 8.5px;
-  letter-spacing: 0.16em;
+  font-size: 10px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-dim);
-  margin-top: 4px;
+  margin-top: 6px;
+  font-weight: 500;
 }
 
 .node-reading {
@@ -1345,11 +1454,11 @@ body {
 .directions-intro {
   font-family: var(--serif);
   font-style: italic;
-  font-size: 13px;
-  color: var(--ink-dim);
+  font-size: 14px;
+  color: var(--ink-mid);
   margin: 0;
-  padding: 18px 24px;
-  line-height: 1.5;
+  padding: 22px 28px 18px 28px;
+  line-height: 1.55;
   border-bottom: 1px solid var(--ink-hairline);
 }
 
@@ -1372,16 +1481,18 @@ body {
 }
 
 .meta-label {
-  font-size: 9px;
-  letter-spacing: 0.18em;
+  font-size: 10px;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--ink-dim);
+  font-weight: 500;
 }
 
 .meta-value {
   color: var(--ink);
   text-align: right;
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .meta-value.complexity-low { color: var(--ink-mid); }
@@ -1397,14 +1508,15 @@ body {
 
 .route-list h4 {
   font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.28em;
+  font-size: 10.5px;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
   color: var(--gold);
   margin: 18px 0 8px 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  font-weight: 600;
 }
 
 .route-count {
@@ -1417,21 +1529,22 @@ body {
 
 .route-button {
   display: grid;
-  grid-template-columns: 14px 1fr auto;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
   align-items: baseline;
   gap: 8px;
   width: 100%;
   text-align: left;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--ink-mid);
   background: none;
   border: none;
   border-left: 1px solid var(--ink-hairline);
-  padding: 6px 8px 6px 10px;
+  padding: 7px 8px 7px 10px;
   cursor: pointer;
   margin-bottom: 1px;
   transition: all 0.2s;
+  overflow: hidden;
 }
 
 .route-button:hover {
@@ -1448,13 +1561,20 @@ body {
 
 .route-name {
   font-weight: 500;
-  word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .route-file {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--ink-dim);
   letter-spacing: 0.02em;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .route-button .est {
@@ -1478,7 +1598,7 @@ body {
 .route-empty {
   font-family: var(--serif);
   font-style: italic;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--ink-dim);
   margin: 4px 0 0 0;
   padding-left: 12px;
@@ -1488,6 +1608,8 @@ body {
 .observation {
   padding: 14px 0;
   border-bottom: 1px solid var(--ink-hairline);
+  overflow-wrap: break-word;
+  word-wrap: break-word;
 }
 
 .observation:last-child { border-bottom: none; }
@@ -1512,10 +1634,10 @@ body {
 
 .observation p {
   font-family: var(--serif);
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.6;
   margin: 0 0 6px 0;
-  color: var(--ink-mid);
+  color: var(--ink);
 }
 
 .observation-refs {
@@ -1566,15 +1688,16 @@ body {
 
 .copy-btn {
   font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.16em;
+  font-size: 10px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   background: none;
   border: 1px solid var(--ink-hairline);
-  color: var(--ink-dim);
-  padding: 3px 8px;
+  color: var(--ink-mid);
+  padding: 4px 10px;
   cursor: pointer;
   transition: all 0.2s;
+  font-weight: 500;
 }
 
 .copy-btn:hover {
@@ -1584,16 +1707,17 @@ body {
 
 .excerpt pre {
   font-family: var(--mono);
-  font-size: 11px;
-  line-height: 1.5;
-  color: var(--ink-mid);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink);
   background: rgba(239, 231, 211, 0.03);
-  padding: 12px;
+  padding: 14px;
   border-left: 2px solid var(--gold);
   overflow-x: auto;
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
+  overflow-wrap: anywhere;
   max-height: 280px;
   overflow-y: auto;
 }
@@ -1631,20 +1755,20 @@ body {
 /* ---------- Glossary view ---------- */
 
 .glossary {
-  padding: 18px 24px 24px 24px;
+  padding: 22px 28px 28px 28px;
 }
 
 .glossary-title,
 .help-title {
   font-family: var(--display);
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 500;
   color: var(--ink);
-  margin: 0 0 14px 0;
+  margin: 0 0 18px 0;
 }
 
 .glossary-row {
-  padding: 12px 0;
+  padding: 14px 0;
   border-bottom: 1px solid var(--ink-hairline);
 }
 
@@ -1652,37 +1776,37 @@ body {
 
 .glossary-term {
   font-family: var(--display);
-  font-size: 16px;
+  font-size: 18px;
   color: var(--gold-bright);
   font-weight: 500;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .glossary-body {
   font-family: var(--serif);
-  font-size: 12.5px;
-  line-height: 1.55;
+  font-size: 14px;
+  line-height: 1.6;
   color: var(--ink-mid);
   margin: 0;
 }
 
 .help-view {
-  padding: 18px 24px 24px 24px;
+  padding: 22px 28px 28px 28px;
 }
 
 .help-intro {
   font-family: var(--serif);
   font-style: italic;
-  font-size: 13.5px;
+  font-size: 15px;
   color: var(--ink-mid);
-  line-height: 1.55;
+  line-height: 1.6;
   margin: 0 0 18px 0;
 }
 
 .help-shortcuts {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 /* ---------- Alert (bad files) ---------- */
@@ -1700,7 +1824,7 @@ body {
 
 /* ---------- Responsive ---------- */
 
-@media (max-width: 1024px) {
+@media (max-width: 1100px) {
   .chart-view {
     grid-template-columns: 1fr;
     grid-template-rows: 1fr auto;
@@ -1708,6 +1832,6 @@ body {
   .side-panel {
     border-left: none;
     border-top: 1px solid var(--ink-hairline);
-    max-height: 40vh;
+    max-height: 45vh;
   }
 }

@@ -45,6 +45,7 @@ export function App() {
   const [showSearch, setShowSearch] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [tourStep, setTourStep] = useState<number | null>(null)
+  const [tourHighlight, setTourHighlight] = useState<number | null>(null)
   const [readyHint, setReadyHint] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dirHandleRef = useRef<FileSystemDirectoryHandle | null>(null)
@@ -309,6 +310,7 @@ export function App() {
 
   const endTour = useCallback(() => {
     setTourStep(null)
+    setTourHighlight(null)
     try { localStorage.setItem(TOUR_STORAGE_KEY, '1') } catch { /* ignore */ }
   }, [])
 
@@ -418,6 +420,8 @@ export function App() {
               hideRocks={hideRocks}
               newOnly={newOnly}
               searchMatch={searchMatch}
+              focusId={tourStep !== null ? tourHighlight : null}
+              focusZoom={tourStep === 1 ? 260 : tourStep === 2 ? 280 : tourStep === 3 ? 200 : undefined}
             />
             <div className="chart-toolbar" data-anim>
               <div className="toolbar-group">
@@ -656,8 +660,19 @@ export function App() {
       )}
 
       {/* Tour */}
-      {tourStep !== null && phase.name === 'charted' && (
-        <Tour step={tourStep} onNext={() => setTourStep((s) => (s == null ? null : s + 1))} onBack={() => setTourStep((s) => (s == null ? null : Math.max(0, s - 1)))} onSkip={endTour} onDone={endTour} />
+      {tourStep !== null && phase.name === 'charted' && currentChart && (
+        <Tour
+          step={tourStep}
+          chart={currentChart}
+          onHighlight={(id) => {
+            setTourHighlight(id)
+            if (id != null) setSelectedId(id)
+          }}
+          onNext={() => setTourStep((s) => (s == null ? null : s + 1))}
+          onBack={() => setTourStep((s) => (s == null ? null : Math.max(0, s - 1)))}
+          onSkip={endTour}
+          onDone={endTour}
+        />
       )}
     </div>
   )
