@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CodeChart } from '../types'
 import { startLayout } from '../graph/layout'
 
@@ -7,19 +7,32 @@ interface Props {
   selectedId: number | null
   newIds: Set<number>
   onSelect: (id: number | null) => void
+  onHover?: (id: number | null) => void
+  highlightKind?: 'all' | 'function' | 'method' | 'class' | null
+  hideRocks?: boolean
+  newOnly?: boolean
+  searchMatch?: Set<number>
 }
 
 const PALETTE = {
   void: '#05060a',
+  voidSoft: '#0a0c14',
   ink: '#efe7d3',
   inkDim: '#8a8275',
   gold: '#d4a857',
   goldBright: '#f2cf80',
   copper: '#c87856',
   azure: '#4a8fc5',
-  edge: '#6a6049',
+  rose: '#ff7d6b',
+  edge: '#3d3a2f',
+  edgeCharted: '#9b7d3e',
+  edgeEst: '#3a3a3a',
   edgeHot: '#f2cf80',
-  edgeEst: '#4a4536',
+  function: '#efe7d3',
+  method: '#8eb6ff',
+  class: '#f2cf80',
+  var: '#c87856',
+  module: ['#d4a857', '#8eb6ff', '#c87856', '#b6e1ff', '#ff9b7a', '#a8c87a', '#c08bc8', '#e8c478'],
 }
 
 interface NodePos {
@@ -27,24 +40,33 @@ interface NodePos {
   x: number
   y: number
   r: number
-  color: string
+  fill: string
   stroke: string
   kind: string
   name: string
+  file: string
+  module: string
+  row: number
   inbound: number
   outbound: number
   isNew: boolean
   isRock: boolean
+  isLighthouse: boolean
+  isPort: boolean
+  isExpedition: boolean
+  isSearchHit: boolean
+  isFaded: boolean
 }
 
 interface EdgePath {
   d: string
-  mid: { x: number; y: number }
-  charted: boolean
   source: number
   target: number
-  selected: boolean
+  charted: boolean
   incident: boolean
+  selected: boolean
+  searchRelated: boolean
+  isFaded: boolean
 }
 
 interface ViewBox {
@@ -53,45 +75,108 @@ interface ViewBox {
   size: number
 }
 
-export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
+export function ChartCanvas({
+  chart,
+  selectedId,
+  newIds,
+  onSelect,
+  onHover,
+  highlightKind = 'all',
+  hideRocks = false,
+  newOnly = false,
+  searchMatch,
+}: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<ViewBox>({ minX: -500, minY: -500, size: 1000 })
-  const dragRef = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null)
+  const dragRef = useRef<{ x: number; y: number; vx: number; vy: number; button: number } | null>(null)
   const dragMovedRef = useRef(false)
   const lastPinchDist = useRef<number | null>(null)
+  const [hoverId, setHoverId] = useState<number | null>(null)
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; node: NodePos } | null>(null)
+  const [showMiniMap, setShowMiniMap] = useState(true)
+  const [mounted, setMounted] = useState(false)
 
-  const { nodeMap, edges, bounds } = useMemo(() => {
+  // Re-tick the layout so node positions feel physical (d3-force)
+  const { nodeMap, edges, bounds, moduleColors } = useMemo(() => {
     const { simulation } = startLayout(chart)
-    for (let i = 0; i < 200; i++) simulation.tick()
+    for (let i = 0; i < 240; i++) simulation.tick()
     const pos = new Map<number, { x: number; y: number }>()
     for (const n of chart.nodes) pos.set(n.id, { x: n.x, y: n.y })
     simulation.stop()
+
+    const moduleList = [...new Set(chart.nodes.map((n) => n.module))]
+    const modColor = new Map<string, string>()
+    moduleList.forEach((m, i) => modColor.set(m, PALETTE.module[i % PALETTE.module.length]))
 
     const map = new Map<number, NodePos>()
     for (const n of chart.nodes) {
       const p = pos.get(n.id)
       if (!p) continue
       const importance = Math.sqrt(n.inbound + n.outbound)
-      const r = 6 + Math.min(importance * 1.6, 14)
+      // Gephi-style radius curve: pronounced but bounded
+      const r = 5 + Math.min(importance * 2.2, 22)
       const isRock = n.inbound === 0 && n.outbound === 0
       const isNew = newIds.has(n.id)
+      const isLighthouse = n.inbound >= 5
+      const isPort = n.inbound === 0 && n.outbound >= 3
+      const isExpedition = n.outbound >= 8
+      const kindFill =
+        n.kind === 'class'
+          ? PALETTE.class
+          : n.kind === 'method'
+            ? PALETTE.method
+            : n.kind === 'var'
+              ? PALETTE.var
+              : PALETTE.function
+      const fill = isRock
+        ? 'rgba(138, 130, 117, 0.5)'
+        : isNew
+          ? PALETTE.goldBright
+          : kindFill
+      const stroke = isNew
+        ? PALETTE.goldBright
+        : isLighthouse
+          ? PALETTE.gold
+          : isRock
+            ? PALETTE.copper
+            : isExpedition
+              ? PALETTE.rose
+              : 'rgba(239, 231, 211, 0.4)'
       map.set(n.id, {
         id: n.id,
         x: p.x,
         y: p.y,
         r,
-        color: isRock ? PALETTE.inkDim : isNew ? PALETTE.goldBright : PALETTE.ink,
-        stroke: isNew ? PALETTE.goldBright : isRock ? PALETTE.copper : PALETTE.gold,
+        fill,
+        stroke,
         kind: n.kind,
         name: n.name,
+        file: n.file,
+        module: n.module,
+        row: n.row,
         inbound: n.inbound,
         outbound: n.outbound,
         isNew,
         isRock,
+        isLighthouse,
+        isPort,
+        isExpedition,
+        isSearchHit: false,
+        isFaded: false,
       })
     }
 
+    // Filter handling
+    const filteredIds = new Set<number>()
+    for (const n of chart.nodes) {
+      if (hideRocks && n.inbound === 0 && n.outbound === 0) continue
+      if (newOnly && !newIds.has(n.id)) continue
+      if (highlightKind && highlightKind !== 'all' && n.kind !== highlightKind) continue
+      filteredIds.add(n.id)
+    }
+
+    // Fade handling: selection or search-related
     const incident = new Set<number>()
     if (selectedId != null) {
       incident.add(selectedId)
@@ -99,6 +184,22 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
         if (e.source === selectedId) incident.add(e.target)
         if (e.target === selectedId) incident.add(e.source)
       }
+    }
+    const searchRelated = new Set<number>()
+    if (searchMatch && searchMatch.size > 0) {
+      for (const e of chart.edges) {
+        if (searchMatch.has(e.source) || searchMatch.has(e.target)) {
+          searchRelated.add(e.source)
+          searchRelated.add(e.target)
+        }
+      }
+      for (const id of searchMatch) searchRelated.add(id)
+    }
+    for (const n of map.values()) {
+      n.isFaded =
+        (selectedId != null && !incident.has(n.id)) ||
+        (searchMatch != null && searchMatch.size > 0 && !searchRelated.has(n.id))
+      n.isSearchHit = searchMatch?.has(n.id) ?? false
     }
 
     const edgePaths: EdgePath[] = chart.edges.flatMap((e) => {
@@ -108,27 +209,34 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
       const na = map.get(e.source)
       const nb = map.get(e.target)
       if (!na || !nb) return []
+      // Edge curves: bezier with control point perpendicular, Gephi-style
       const dx = b.x - a.x
       const dy = b.y - a.y
       const len = Math.hypot(dx, dy) || 1
+      const curvature = Math.min(0.18, 30 / Math.max(len, 50))
+      const mx = (a.x + b.x) / 2 - dy * curvature
+      const my = (a.y + b.y) / 2 + dx * curvature
+      // Shorten to land at the node's edge
       const ux = dx / len
       const uy = dy / len
-      const ax = a.x + ux * na.r
-      const ay = a.y + uy * na.r
-      const bx = b.x - ux * nb.r
-      const by = b.y - uy * nb.r
-      const mx = (ax + bx) / 2
-      const my = (ay + by) / 2
+      const ax = a.x + ux * (na.r + 1)
+      const ay = a.y + uy * (na.r + 1)
+      const bx = b.x - ux * (nb.r + 1)
+      const by = b.y - uy * (nb.r + 1)
+      const d = `M ${ax.toFixed(2)} ${ay.toFixed(2)} Q ${mx.toFixed(2)} ${my.toFixed(2)} ${bx.toFixed(2)} ${by.toFixed(2)}`
       const isSel = selectedId != null
       const isInc = isSel && (e.source === selectedId || e.target === selectedId)
+      const isFadedEdge = isSel && !isInc
+      const isSearchRel = searchRelated.has(e.source) && searchRelated.has(e.target)
       return [{
-        d: `M ${ax} ${ay} L ${bx} ${by}`,
-        mid: { x: mx, y: my },
-        charted: e.charted,
+        d,
         source: e.source,
         target: e.target,
-        selected: isSel,
+        charted: e.charted,
         incident: isInc,
+        selected: isSel,
+        searchRelated: isSearchRel,
+        isFaded: isFadedEdge,
       }]
     })
 
@@ -139,15 +247,20 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
       if (p.x > maxX) maxX = p.x
       if (p.y > maxY) maxY = p.y
     }
-    const pad = 80
+    const pad = 120
     minX -= pad
     minY -= pad
     maxX += pad
     maxY += pad
     const size = Math.max(maxX - minX, maxY - minY)
 
-    return { nodeMap: map, edges: edgePaths, bounds: { minX, minY, maxX, maxY, size } }
-  }, [chart, newIds, selectedId])
+    return {
+      nodeMap: map,
+      edges: edgePaths,
+      bounds: { minX, minY, maxX, maxY, size },
+      moduleColors: modColor,
+    }
+  }, [chart, newIds, selectedId, highlightKind, hideRocks, newOnly, searchMatch])
 
   useEffect(() => {
     viewRef.current = {
@@ -155,6 +268,7 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
       minY: bounds.minY - (bounds.size - (bounds.maxY - bounds.minY)) / 2,
       size: bounds.size,
     }
+    setMounted(true)
   }, [bounds])
 
   useEffect(() => {
@@ -172,7 +286,7 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
     const onPointerDown = (e: PointerEvent) => {
       if (e.button !== 0 && e.button !== 1) return
       ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
-      dragRef.current = { x: e.clientX, y: e.clientY, vx: 0, vy: 0 }
+      dragRef.current = { x: e.clientX, y: e.clientY, vx: 0, vy: 0, button: e.button }
       dragMovedRef.current = false
     }
     const onPointerMove = (e: PointerEvent) => {
@@ -182,7 +296,7 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
       const v = viewRef.current
       const dxScreen = e.clientX - drag.x
       const dyScreen = e.clientY - drag.y
-      if (Math.hypot(dxScreen, dyScreen) > 3) dragMovedRef.current = true
+      if (Math.hypot(dxScreen, dyScreen) > 4) dragMovedRef.current = true
       const scale = v.size / rect.width
       v.minX -= dxScreen * scale
       v.minY -= dyScreen * scale
@@ -191,16 +305,21 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
       drag.x = e.clientX
       drag.y = e.clientY
       render()
+      // Update tooltip position
+      if (tooltip) setTooltip({ ...tooltip, x: e.clientX - rect.left, y: e.clientY - rect.top })
     }
     const onPointerUp = (e: PointerEvent) => {
       const drag = dragRef.current
       ;(e.currentTarget as Element).releasePointerCapture?.(e.pointerId)
       if (!drag) return
-      if (!dragMovedRef.current && e.button === 0) {
+      if (!dragMovedRef.current && drag.button === 0) {
         const target = e.target as Element
-        const nodeId = target.closest('[data-node]')?.getAttribute('data-node')
-        if (nodeId) onSelect(Number(nodeId))
-        else if (target === svg) onSelect(null)
+        const nodeEl = target.closest('[data-node]') as HTMLElement | null
+        if (nodeEl) {
+          onSelect(Number(nodeEl.dataset.node))
+        } else if (target === svg) {
+          onSelect(null)
+        }
       }
       dragRef.current = null
       const applyInertia = () => {
@@ -208,8 +327,8 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
           const v = viewRef.current
           v.minX += drag.vx
           v.minY += drag.vy
-          drag.vx *= 0.92
-          drag.vy *= 0.92
+          drag.vx *= 0.93
+          drag.vy *= 0.93
           render()
           dragRaf = requestAnimationFrame(applyInertia)
         }
@@ -225,8 +344,7 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
       const cy = e.clientY - rect.top
       const worldX = v.minX + (cx / rect.width) * v.size
       const worldY = v.minY + (cy / rect.height) * v.size
-      // Natural scroll: wheel up (deltaY < 0) = zoom in (smaller viewBox).
-      const intensity = e.ctrlKey ? 0.01 : 0.0015
+      const intensity = e.ctrlKey ? 0.01 : 0.0014
       const factor = Math.exp(e.deltaY * intensity)
       v.size = Math.min(Math.max(v.size * factor, 80), 12000)
       v.minX = worldX - (cx / rect.width) * v.size
@@ -303,65 +421,124 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
       svg.removeEventListener('touchend', onTouchEnd)
       window.removeEventListener('keydown', onKeyDown)
     }
-  }, [bounds, onSelect])
+  }, [bounds, onSelect, tooltip])
 
   const nodeList = useMemo(() => Array.from(nodeMap.values()), [nodeMap])
 
+  const handleNodeEnter = (n: NodePos, e: React.MouseEvent) => {
+    setHoverId(n.id)
+    onHover?.(n.id)
+    const rect = svgRef.current?.getBoundingClientRect()
+    if (rect) {
+      setTooltip({ x: e.clientX - rect.left, y: e.clientY - rect.top, node: n })
+    }
+  }
+  const handleNodeMove = (n: NodePos, e: React.MouseEvent) => {
+    const rect = svgRef.current?.getBoundingClientRect()
+    if (rect) {
+      setTooltip({ x: e.clientX - rect.left, y: e.clientY - rect.top, node: n })
+    }
+  }
+  const handleNodeLeave = () => {
+    setHoverId(null)
+    onHover?.(null)
+    setTooltip(null)
+  }
+
+  // Decide which labels to render (Gephi always labels the visible/important ones)
+  const labelCutoff = 12 // only nodes above this radius get inline labels
+  const showAllLabels = nodeList.length <= 50
+
+  // Compute mini-map viewport rect
+  const miniMap = useMemo(() => {
+    if (!bounds.size) return null
+    const mapSize = 160
+    const scale = mapSize / bounds.size
+    const v = viewRef.current
+    const vx = ((v.minX - bounds.minX) * scale)
+    const vy = ((v.minY - bounds.minY) * scale)
+    const vs = (v.size * scale)
+    return { scale, vx, vy, vs, size: mapSize, bounds }
+  }, [bounds, nodeList.length])
+
   return (
-    <div ref={containerRef} className="chart-canvas-2d">
+    <div ref={containerRef} className={`chart-canvas-2d ${mounted ? 'mounted' : ''}`}>
       <svg ref={svgRef} className="chart-svg" preserveAspectRatio="xMidYMid meet">
         <defs>
-          <marker
-            id="arrowhead"
-            viewBox="0 0 10 10"
-            refX="9"
-            refY="5"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto-start-reverse"
-          >
-            <path d="M 0 0 L 10 5 L 0 10 z" fill={PALETTE.gold} />
+          <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill={PALETTE.edgeCharted} />
           </marker>
-          <marker
-            id="arrowhead-est"
-            viewBox="0 0 10 10"
-            refX="9"
-            refY="5"
-            markerWidth="5"
-            markerHeight="5"
-            orient="auto-start-reverse"
-          >
+          <marker id="arrowhead-est" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4" markerHeight="4" orient="auto">
             <path d="M 0 0 L 10 5 L 0 10 z" fill={PALETTE.edgeEst} />
           </marker>
-          <marker
-            id="arrowhead-hot"
-            viewBox="0 0 10 10"
-            refX="9"
-            refY="5"
-            markerWidth="7"
-            markerHeight="7"
-            orient="auto-start-reverse"
-          >
+          <marker id="arrowhead-hot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
             <path d="M 0 0 L 10 5 L 0 10 z" fill={PALETTE.goldBright} />
           </marker>
           <radialGradient id="bgGlow" cx="50%" cy="50%" r="70%">
-            <stop offset="0%" stopColor="#1a1a2a" stopOpacity="0.6" />
+            <stop offset="0%" stopColor="#15172a" stopOpacity="0.7" />
             <stop offset="100%" stopColor="#05060a" stopOpacity="0" />
           </radialGradient>
+          <filter id="nodeHalo" x="-200%" y="-200%" width="500%" height="500%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="2" />
+          </filter>
         </defs>
 
-        <rect x="-5000" y="-5000" width="10000" height="10000" fill="url(#bgGlow)" />
+        <rect x="-8000" y="-8000" width="16000" height="16000" fill="url(#bgGlow)" />
 
+        {/* Module halos: faint colored disks behind each module's cluster */}
+        <g className="module-halos" opacity="0.18" pointerEvents="none">
+          {(() => {
+            const groups = new Map<string, { x: number; y: number; nodes: NodePos[] }>()
+            for (const n of nodeList) {
+              if (n.isFaded && !n.isLighthouse && !n.isPort) continue
+              const g = groups.get(n.module) ?? { x: 0, y: 0, nodes: [] }
+              g.x += n.x
+              g.y += n.y
+              g.nodes.push(n)
+              groups.set(n.module, g)
+            }
+            return Array.from(groups.entries()).map(([m, g]) => {
+              const cx = g.x / g.nodes.length
+              const cy = g.y / g.nodes.length
+              const radius = Math.max(...g.nodes.map((n) => Math.hypot(n.x - cx, n.y - cy))) + 40
+              const color = moduleColors.get(m) ?? PALETTE.gold
+              return (
+                <circle
+                  key={m}
+                  cx={cx}
+                  cy={cy}
+                  r={radius}
+                  fill={color}
+                  opacity="0.08"
+                  stroke={color}
+                  strokeWidth="0.4"
+                  strokeOpacity="0.25"
+                />
+              )
+            })
+          })()}
+        </g>
+
+        {/* Edges */}
         <g className="edges">
           {edges.map((e, i) => {
             const stroke = e.incident
-              ? PALETTE.edgeHot
-              : e.selected
-                ? PALETTE.edge
-                : e.charted
-                  ? PALETTE.gold
-                  : PALETTE.edgeEst
-            const opacity = e.selected ? (e.incident ? 0.95 : 0.15) : 0.55
+              ? PALETTE.goldBright
+              : e.searchRelated
+                ? PALETTE.azure
+                : e.isFaded
+                  ? 'rgba(61, 58, 47, 0.12)'
+                  : e.charted
+                    ? PALETTE.edgeCharted
+                    : PALETTE.edgeEst
+            const opacity = e.incident
+              ? 0.95
+              : e.searchRelated
+                ? 0.85
+                : e.isFaded
+                  ? 0.4
+                  : 0.55
+            const sw = e.incident ? 2 : e.searchRelated ? 1.6 : e.charted ? 0.9 : 0.6
             const marker = e.incident
               ? 'url(#arrowhead-hot)'
               : e.charted
@@ -372,58 +549,152 @@ export function ChartCanvas({ chart, selectedId, newIds, onSelect }: Props) {
                 key={i}
                 d={e.d}
                 stroke={stroke}
-                strokeWidth={e.incident ? 1.6 : e.charted ? 1.1 : 0.8}
-                strokeDasharray={e.charted ? undefined : '5 4'}
+                strokeWidth={sw}
+                strokeDasharray={e.charted ? undefined : '4 3'}
                 opacity={opacity}
                 fill="none"
                 markerEnd={marker}
                 pointerEvents="none"
+                className="edge"
               />
             )
           })}
         </g>
 
+        {/* Nodes */}
         <g className="nodes">
           {nodeList.map((n) => {
             const isSel = selectedId === n.id
+            const isHover = hoverId === n.id
+            const showLabel = isSel || isHover || n.r >= labelCutoff || showAllLabels || n.isLighthouse || n.isNew
+            const opacity = n.isFaded ? 0.25 : 1
+            const fontSize = Math.max(8, Math.min(n.r * 0.85, 14))
             return (
               <g
                 key={n.id}
                 data-node={n.id}
                 transform={`translate(${n.x} ${n.y})`}
-                style={{ cursor: 'pointer' }}
+                style={{ cursor: 'pointer', opacity }}
+                onMouseEnter={(e) => handleNodeEnter(n, e)}
+                onMouseMove={(e) => handleNodeMove(n, e)}
+                onMouseLeave={handleNodeLeave}
+                className={`node ${isSel ? 'selected' : ''} ${isHover ? 'hovered' : ''} ${n.isLighthouse ? 'lighthouse' : ''} ${n.isPort ? 'port' : ''} ${n.isRock ? 'rock' : ''} ${n.isExpedition ? 'expedition' : ''} ${n.isNew ? 'new' : ''} ${n.isSearchHit ? 'search-hit' : ''}`}
               >
-                {isSel && (
-                  <circle r={n.r + 8} fill="none" stroke={PALETTE.goldBright} strokeWidth={1.5} opacity={0.7} />
+                {/* Outer halo for lighthouses / selected / new */}
+                {(isSel || n.isLighthouse || n.isNew) && (
+                  <circle
+                    r={n.r + 6}
+                    fill="none"
+                    stroke={isSel ? PALETTE.goldBright : n.isLighthouse ? PALETTE.gold : PALETTE.goldBright}
+                    strokeWidth={isSel ? 1.5 : 0.6}
+                    opacity={isSel ? 0.8 : 0.45}
+                    strokeDasharray={n.isNew && !isSel ? '2 2' : undefined}
+                  />
                 )}
+                {/* Selection ring */}
+                {isSel && (
+                  <circle r={n.r + 12} fill="none" stroke={PALETTE.goldBright} strokeWidth={0.4} opacity={0.4} />
+                )}
+                {/* Main circle */}
                 <circle
                   r={n.r}
-                  fill={n.color}
-                  fillOpacity={n.isRock ? 0.6 : 0.95}
+                  fill={n.fill}
+                  fillOpacity={n.isRock ? 0.55 : 0.95}
                   stroke={n.stroke}
-                  strokeWidth={isSel ? 2 : 1}
+                  strokeWidth={isSel ? 1.8 : isHover ? 1.4 : 0.8}
+                  className="node-body"
                 />
-                {n.inbound + n.outbound >= 3 && (
-                  <circle r={n.r + 4} fill="none" stroke={PALETTE.gold} strokeWidth={0.4} opacity={0.5} />
+                {/* Expedition marker */}
+                {n.isExpedition && !n.isRock && (
+                  <circle r={n.r * 0.5} fill="none" stroke={PALETTE.rose} strokeWidth={0.6} strokeDasharray="1 1.5" />
                 )}
-                {n.isNew && (
-                  <circle r={n.r + 3} fill="none" stroke={PALETTE.goldBright} strokeWidth={1} strokeDasharray="2 2" />
+                {/* Label */}
+                {showLabel && (
+                  <text
+                    y={n.r + fontSize + 2}
+                    textAnchor="middle"
+                    fontSize={fontSize}
+                    fill={n.isNew ? PALETTE.goldBright : isSel ? PALETTE.ink : n.isLighthouse ? PALETTE.gold : PALETTE.ink}
+                    fontFamily="'IBM Plex Mono', 'Cascadia Mono', monospace"
+                    fontWeight={isSel || n.isLighthouse || n.isNew ? 600 : 400}
+                    pointerEvents="none"
+                    className="node-label"
+                  >
+                    {n.name}
+                  </text>
                 )}
-                <text
-                  y={n.r + 12}
-                  textAnchor="middle"
-                  fontSize={Math.max(n.r, 7)}
-                  fill={n.isNew ? PALETTE.goldBright : PALETTE.inkDim}
-                  fontFamily="'IBM Plex Mono', monospace"
-                  pointerEvents="none"
-                >
-                  {n.name}
-                </text>
               </g>
             )
           })}
         </g>
       </svg>
+
+      {/* Tooltip */}
+      {tooltip && !dragRef.current && (
+        <div
+          className="chart-tooltip"
+          style={{
+            left: Math.min(tooltip.x + 14, (containerRef.current?.clientWidth ?? 0) - 240),
+            top: Math.max(tooltip.y - 12, 12),
+          }}
+        >
+          <div className="tooltip-kicker">{kindLabel(tooltip.node.kind)} · {tooltip.node.module || 'root'}</div>
+          <div className="tooltip-name">{tooltip.node.name}</div>
+          <div className="tooltip-stats">
+            <span><b>{tooltip.node.inbound}</b> in</span>
+            <span><b>{tooltip.node.outbound}</b> out</span>
+          </div>
+          {tooltip.node.isLighthouse && <div className="tooltip-badge lighthouse">Lighthouse</div>}
+          {tooltip.node.isPort && <div className="tooltip-badge port">Port of departure</div>}
+          {tooltip.node.isExpedition && <div className="tooltip-badge expedition">Expedition</div>}
+          {tooltip.node.isRock && <div className="tooltip-badge rock">Rock</div>}
+          {tooltip.node.isNew && <div className="tooltip-badge new">New</div>}
+          <div className="tooltip-file">{tooltip.node.file}:{tooltip.node.row}</div>
+        </div>
+      )}
+
+      {/* Mini-map */}
+      {showMiniMap && miniMap && nodeList.length > 5 && (
+        <div className="mini-map" onClick={() => setShowMiniMap(false)}>
+          <svg viewBox={`0 0 ${miniMap.size} ${miniMap.size}`} width={miniMap.size} height={miniMap.size}>
+            <rect width={miniMap.size} height={miniMap.size} fill="rgba(10, 12, 20, 0.7)" stroke="rgba(239, 231, 211, 0.2)" />
+            {nodeList.map((n) => {
+              const x = (n.x - miniMap.bounds.minX) * miniMap.scale
+              const y = (n.y - miniMap.bounds.minY) * miniMap.scale
+              return (
+                <circle
+                  key={n.id}
+                  cx={x}
+                  cy={y}
+                  r={Math.max(1, n.r * miniMap.scale * 0.4)}
+                  fill={n.isFaded ? 'rgba(138, 130, 117, 0.3)' : n.fill}
+                  opacity={n.isFaded ? 0.3 : 0.9}
+                />
+              )
+            })}
+            <rect
+              x={miniMap.vx}
+              y={miniMap.vy}
+              width={miniMap.vs}
+              height={miniMap.vs}
+              fill="none"
+              stroke={PALETTE.gold}
+              strokeWidth="1.2"
+              pointerEvents="none"
+            />
+          </svg>
+        </div>
+      )}
     </div>
   )
+}
+
+function kindLabel(kind: string): string {
+  switch (kind) {
+    case 'function': return 'Function'
+    case 'method': return 'Method'
+    case 'class': return 'Class'
+    case 'var': return 'Variable'
+    default: return kind
+  }
 }

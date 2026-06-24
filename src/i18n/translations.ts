@@ -81,6 +81,87 @@ export interface Translations {
     expedition: string
     instantiated: string
   }
+  help: {
+    title: string
+    intro: string
+    pan: string
+    zoom: string
+    select: string
+    deselect: string
+    reset: string
+    search: string
+    filter: string
+    tour: string
+    next: string
+    back: string
+    skip: string
+    done: string
+    steps: {
+      welcome: { title: string; body: string }
+      nodes: { title: string; body: string }
+      edges: { title: string; body: string }
+      select: { title: string; body: string }
+      sidepanel: { title: string; body: string }
+      legend: { title: string; body: string }
+    }
+    glossary: {
+      title: string
+      lighthouse: { term: string; body: string }
+      port: { term: string; body: string }
+      rock: { term: string; body: string }
+      expedition: { term: string; body: string }
+      island: { term: string; body: string }
+      strait: { term: string; body: string }
+      charted: { term: string; body: string }
+      estimated: { term: string; body: string }
+    }
+  }
+  search: {
+    placeholder: string
+    empty: string
+    results: string
+    result: string
+  }
+  filters: {
+    title: string
+    all: string
+    functions: string
+    methods: string
+    classes: string
+    hideRocks: string
+    showRocks: string
+    newOnly: string
+  }
+  node: {
+    module: string
+    kind: string
+    file: string
+    line: string
+    copyExcerpt: string
+    copied: string
+    noIncoming: string
+    noOutgoing: string
+    callsIn: string
+    callsOut: string
+    callers: string
+    callees: string
+    reach: string
+    reachDesc: string
+    complexity: string
+    complexityLow: string
+    complexityMid: string
+    complexityHigh: string
+  }
+  resurveying: string
+  noChanges: string
+  showHelp: string
+  showGlossary: string
+  howToRead: string
+  tourAgain: string
+  chartReady: string
+  chartReadyBody: string
+  firstSteps: string
+  readTheChart: string
 }
 
 const en: Translations = {
@@ -110,7 +191,7 @@ const en: Translations = {
     rock: 'rock = never called, calls nothing',
     filledNew: 'filled = new since last survey',
     remarks: 'Remarks',
-    selectSymbol: 'Notes from the survey. Select a symbol for its own entry.',
+    selectSymbol: 'Notes from the survey. Click a symbol on the chart for its own entry.',
     noChange: 'No change',
     sinceLastSurvey: 'Since last survey',
     new: 'new',
@@ -164,6 +245,129 @@ const en: Translations = {
     expedition: 'expedition',
     instantiated: 'Instantiated',
   },
+  help: {
+    title: 'How to read this chart',
+    intro: 'A 19th-century surveyor\u2019s reading of your code. Click any symbol to study it; pan and zoom to navigate; the panel on the right tells you what the chart says about it.',
+    pan: 'Drag to pan · scroll to zoom · 0 to recenter',
+    zoom: 'Wheel or trackpad pinch to zoom',
+    select: 'Click any node for details',
+    deselect: 'Click empty water to deselect',
+    reset: 'Press 0 to fit the whole chart',
+    search: 'Press / to search for a symbol',
+    filter: 'Press F to filter by kind',
+    tour: 'Take the tour',
+    next: 'Next',
+    back: 'Back',
+    skip: 'Skip',
+    done: 'Done',
+    steps: {
+      welcome: {
+        title: 'A chart of your code',
+        body: 'Every circle is a function, method, class or variable. Every line is a call from one to another. The chart is laid out by force, so closely connected code clusters together.',
+      },
+      nodes: {
+        title: 'Reading the marks',
+        body: 'A larger mark means a more-traveled symbol. Gold rings are charted routes \u2014 calls the parser can prove. Copper is a "rock" \u2014 nothing in this survey calls it, and it calls nothing. A dashed gold ring means the symbol is new since your last survey.',
+      },
+      edges: {
+        title: 'Following the routes',
+        body: 'Solid gold lines are proven calls. Dashed dim lines are "estimated" \u2014 calls matched by name only, where the parser could not pin them to a single definition. The arrowhead shows the direction of the call.',
+      },
+      select: {
+        title: 'Pick a symbol',
+        body: 'Click any node. The panel on the right opens with everything we know about it: who calls it, what it calls, the chart\u2019s reading of it, and a copy of its source.',
+      },
+      sidepanel: {
+        title: 'The remarks',
+        body: 'The numbered notes on the right are the chart\u2019s observations: lighthouses (most-called), ports of departure (entry points), rocks (dead code), straits (where modules couple), and islands (groups that never speak to each other).',
+      },
+      legend: {
+        title: 'Legend',
+        body: 'The legend at the bottom decodes every mark. The mini-map in the corner keeps your bearings when you zoom in deep.',
+      },
+    },
+    glossary: {
+      title: 'Glossary of marks',
+      lighthouse: {
+        term: 'Lighthouse',
+        body: 'A heavily-called symbol. Changes here ripple through the whole code. Worth a careful eye.',
+      },
+      port: {
+        term: 'Port of departure',
+        body: 'A symbol nothing in the chart calls, but that calls many things. A likely entry point: a handler, a CLI command, a public API surface.',
+      },
+      rock: {
+        term: 'Rock',
+        body: 'A symbol with no routes at all \u2014 not called by anything surveyed, and calling nothing. Either dead code, or called from outside (tests, templates, reflection).',
+      },
+      expedition: {
+        term: 'Expedition',
+        body: 'A symbol with many outgoing routes. Complexity gathers here. Often a god function or a hub that knows too much.',
+      },
+      island: {
+        term: 'Island',
+        body: 'A group of symbols with no calls to or from the rest of the chart. Either truly disconnected code, or connected by means the survey cannot see.',
+      },
+      strait: {
+        term: 'Strait',
+        body: 'A pair of modules that exchange many calls. The point of greatest coupling \u2014 changing either side will be felt on the other.',
+      },
+      charted: {
+        term: 'Charted route',
+        body: 'A call the parser can prove: same file, or an unambiguous name match. Drawn as a solid gold line.',
+      },
+      estimated: {
+        term: 'Estimated route',
+        body: 'A call matched by name only. The parser saw a call to "render" but several "render" functions exist. Drawn as a dashed dim line \u2014 a lead, not a fact.',
+      },
+    },
+  },
+  search: {
+    placeholder: 'Search symbols\u2026',
+    empty: 'No symbols match',
+    results: 'matches',
+    result: 'match',
+  },
+  filters: {
+    title: 'Filter',
+    all: 'All',
+    functions: 'Functions',
+    methods: 'Methods',
+    classes: 'Classes',
+    hideRocks: 'Hide rocks',
+    showRocks: 'Show rocks',
+    newOnly: 'New only',
+  },
+  node: {
+    module: 'Module',
+    kind: 'Kind',
+    file: 'File',
+    line: 'Line',
+    copyExcerpt: 'Copy excerpt',
+    copied: 'Copied',
+    noIncoming: 'Nothing in the survey calls this.',
+    noOutgoing: 'This symbol calls nothing in the survey.',
+    callsIn: 'callers',
+    callsOut: 'callees',
+    callers: 'Callers',
+    callees: 'Callees',
+    reach: 'Reach',
+    reachDesc: 'Symbols reachable from here, directly or transitively.',
+    complexity: 'Complexity',
+    complexityLow: 'Tidy',
+    complexityMid: 'Worth a look',
+    complexityHigh: 'Hub',
+  },
+  resurveying: 'Re-surveying\u2026',
+  noChanges: 'The waters are unchanged.',
+  showHelp: 'Show help',
+  showGlossary: 'Glossary',
+  howToRead: 'How to read',
+  tourAgain: 'Take the tour',
+  chartReady: 'The chart is ready',
+  chartReadyBody: 'Click any mark to study it. Drag to pan, scroll to zoom, press 0 to recenter.',
+  firstSteps: 'First time here?',
+  readTheChart: 'Read the chart',
 }
 
 const es: Translations = {
@@ -193,7 +397,7 @@ const es: Translations = {
     rock: 'roca = nunca llamado, no llama a nada',
     filledNew: 'relleno = nuevo desde el último levantamiento',
     remarks: 'Notas',
-    selectSymbol: 'Notas del levantamiento. Selecciona un símbolo para ver su entrada.',
+    selectSymbol: 'Notas del levantamiento. Haz clic en un símbolo de la carta para ver su entrada.',
     noChange: 'Sin cambios',
     sinceLastSurvey: 'Desde el último levantamiento',
     new: 'nuevos',
@@ -247,6 +451,129 @@ const es: Translations = {
     expedition: 'expedición',
     instantiated: 'Instanciado',
   },
+  help: {
+    title: 'Cómo leer esta carta',
+    intro: 'La lectura que un cartógrafo del siglo XIX haría de tu código. Haz clic en cualquier símbolo para estudiarlo; arrastra y haz zoom para navegar; el panel de la derecha te dice lo que la carta opina de él.',
+    pan: 'Arrastra para mover · scroll para zoom · 0 para recentrar',
+    zoom: 'Rueda o pinch en el trackpad para hacer zoom',
+    select: 'Clic en cualquier nodo para ver detalles',
+    deselect: 'Clic en el agua para deseleccionar',
+    reset: 'Pulsa 0 para encajar la carta',
+    search: 'Pulsa / para buscar un símbolo',
+    filter: 'Pulsa F para filtrar por tipo',
+    tour: 'Hacer el tour',
+    next: 'Siguiente',
+    back: 'Atrás',
+    skip: 'Saltar',
+    done: 'Hecho',
+    steps: {
+      welcome: {
+        title: 'Una carta de tu código',
+        body: 'Cada círculo es una función, método, clase o variable. Cada línea es una llamada de uno a otro. La carta se ordena por fuerzas, por lo que el código muy conectado se agrupa.',
+      },
+      nodes: {
+        title: 'Leyendo las marcas',
+        body: 'Una marca más grande significa un símbolo más transitado. Anillos dorados son rutas trazadas — llamadas que el parser puede probar. Cobre es una "roca" — nada en este levantamiento la llama, y no llama a nada. Un anillo dorado punteado significa que el símbolo es nuevo desde tu último levantamiento.',
+      },
+      edges: {
+        title: 'Siguiendo las rutas',
+        body: 'Líneas doradas sólidas son llamadas probadas. Líneas tenues punteadas son "estimadas" — llamadas que coinciden solo por nombre, donde el parser no pudo fijarlas a una sola definición. La punta de flecha muestra la dirección de la llamada.',
+      },
+      select: {
+        title: 'Elige un símbolo',
+        body: 'Haz clic en cualquier nodo. El panel de la derecha se abre con todo lo que sabemos de él: quién lo llama, qué llama, la lectura de la carta sobre él, y una copia de su código.',
+      },
+      sidepanel: {
+        title: 'Las notas',
+        body: 'Las notas numeradas a la derecha son las observaciones de la carta: faros (los más llamados), puertos de partida (puntos de entrada), rocas (código muerto), estrechos (donde se acoplan los módulos), e islas (grupos que no se hablan entre sí).',
+      },
+      legend: {
+        title: 'Leyenda',
+        body: 'La leyenda al pie descodifica cada marca. El minimapa en la esquina te mantiene orientado cuando haces mucho zoom.',
+      },
+    },
+    glossary: {
+      title: 'Glosario de marcas',
+      lighthouse: {
+        term: 'Faro',
+        body: 'Un símbolo muy llamado. Los cambios aquí se propagan por todo el código. Vale la pena mirarlo con cuidado.',
+      },
+      port: {
+        term: 'Puerto de partida',
+        body: 'Un símbolo al que nada en la carta llama, pero que llama a muchas cosas. Un punto de entrada probable: un handler, un comando CLI, una API pública.',
+      },
+      rock: {
+        term: 'Roca',
+        body: 'Un símbolo sin ninguna ruta — no lo llama nada del levantamiento, y no llama a nada. O bien código muerto, o llamado desde fuera (tests, plantillas, reflexión).',
+      },
+      expedition: {
+        term: 'Expedición',
+        body: 'Un símbolo con muchas rutas salientes. La complejidad se concentra aquí. A menudo una función dios o un hub que sabe demasiado.',
+      },
+      island: {
+        term: 'Isla',
+        body: 'Un grupo de símbolos sin llamadas hacia o desde el resto de la carta. O bien código realmente desconectado, o conectado por medios que el levantamiento no puede ver.',
+      },
+      strait: {
+        term: 'Estrecho',
+        body: 'Un par de módulos que intercambian muchas llamadas. El punto de mayor acoplamiento — cambiar cualquier lado se notará en el otro.',
+      },
+      charted: {
+        term: 'Ruta trazada',
+        body: 'Una llamada que el parser puede probar: mismo archivo, o coincidencia de nombre no ambigua. Se dibuja como línea dorada sólida.',
+      },
+      estimated: {
+        term: 'Ruta estimada',
+        body: 'Una llamada que coincide solo por nombre. El parser vio una llamada a "render" pero hay varias funciones "render". Se dibuja como línea tenue punteada — una pista, no un hecho.',
+      },
+    },
+  },
+  search: {
+    placeholder: 'Buscar símbolos…',
+    empty: 'Ningún símbolo coincide',
+    results: 'coincidencias',
+    result: 'coincidencia',
+  },
+  filters: {
+    title: 'Filtrar',
+    all: 'Todo',
+    functions: 'Funciones',
+    methods: 'Métodos',
+    classes: 'Clases',
+    hideRocks: 'Ocultar rocas',
+    showRocks: 'Mostrar rocas',
+    newOnly: 'Solo nuevos',
+  },
+  node: {
+    module: 'Módulo',
+    kind: 'Tipo',
+    file: 'Archivo',
+    line: 'Línea',
+    copyExcerpt: 'Copiar excerpt',
+    copied: 'Copiado',
+    noIncoming: 'Nada en el levantamiento llama a esto.',
+    noOutgoing: 'Este símbolo no llama a nada en el levantamiento.',
+    callsIn: 'llamantes',
+    callsOut: 'llamados',
+    callers: 'Llamantes',
+    callees: 'Llamados',
+    reach: 'Alcance',
+    reachDesc: 'Símbolos alcanzables desde aquí, directa o transitivamente.',
+    complexity: 'Complejidad',
+    complexityLow: 'Ordenado',
+    complexityMid: 'A revisar',
+    complexityHigh: 'Hub',
+  },
+  resurveying: 'Relevantando…',
+  noChanges: 'Las aguas no han cambiado.',
+  showHelp: 'Mostrar ayuda',
+  showGlossary: 'Glosario',
+  howToRead: 'Cómo leer',
+  tourAgain: 'Hacer el tour',
+  chartReady: 'La carta está lista',
+  chartReadyBody: 'Haz clic en una marca para estudiarla. Arrastra para mover, scroll para zoom, pulsa 0 para recentrar.',
+  firstSteps: '¿Primera vez aquí?',
+  readTheChart: 'Leer la carta',
 }
 
 export const translations = { en, es }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { animate, stagger } from 'animejs'
 import type { CodeChart, FileEntry } from '../types'
 import { buildChart } from '../graph/build'
@@ -17,23 +17,35 @@ import { SPECIMEN_FILES, SPECIMEN_NAME } from '../demo/specimen'
 import { ChartCanvas } from './ChartCanvas'
 import { SidePanel } from './SidePanel'
 import { LanguageSelector } from './LanguageSelector'
+import { Tour } from './Tour'
 import { useI18n } from '../i18n/context'
 import { tauriAvailable, pickDirectory, scanDirectoryNative } from '../native/fs'
 import { listen } from '@tauri-apps/api/event'
 
 const WATCH_INTERVAL_MS = 15_000
+const TOUR_STORAGE_KEY = 'meridian:tour:done'
 
 type Phase =
   | { name: 'landing' }
   | { name: 'surveying'; detail: string }
   | { name: 'charted'; chart: CodeChart; title: string; delta: SurveyDelta | null }
 
+type FilterKind = 'all' | 'function' | 'method' | 'class'
+
 export function App() {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const [phase, setPhase] = useState<Phase>({ name: 'landing' })
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [watching, setWatching] = useState(false)
   const [canWatch, setCanWatch] = useState(false)
+  const [filterKind, setFilterKind] = useState<FilterKind>('all')
+  const [hideRocks, setHideRocks] = useState(false)
+  const [newOnly, setNewOnly] = useState(false)
+  const [search, setSearch] = useState('')
+  const [showSearch, setShowSearch] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
+  const [tourStep, setTourStep] = useState<number | null>(null)
+  const [readyHint, setReadyHint] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dirHandleRef = useRef<FileSystemDirectoryHandle | null>(null)
   const nativeDirRef = useRef<string | null>(null)
@@ -127,6 +139,7 @@ export function App() {
         setSelectedId(null)
       }
       setPhase({ name: 'charted', chart, title, delta })
+      setReadyHint(true)
     },
     [t],
   )
@@ -243,19 +256,87 @@ export function App() {
     }
   }, [isNative, t.labels.title, openFolder, openSpecimen, resurvey])
 
-  // Animate selection changes
+  // Global hotkeys
   useEffect(() => {
     if (phase.name !== 'charted') return
-    animate('.titleblock em, .grade-was', {
-      scale: [0.85, 1],
-      opacity: [0.4, 1],
-      duration: 500,
-      ease: 'outBack',
-    })
-  }, [selectedId, phase.name])
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement) return
+      if (e.key === '/') {
+        e.preventDefault()
+        setShowSearch(true)
+      } else if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault()
+        setFilterKind((k) => (k === 'all' ? 'function' : k === 'function' ? 'method' : k === 'method' ? 'class' : 'all'))
+      } else if (e.key === 'h' || e.key === 'H') {
+        e.preventDefault()
+        setHideRocks((v) => !v)
+      } else if (e.key === 'n' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault()
+        setNewOnly((v) => !v)
+      } else if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+        e.preventDefault()
+        setShowHelp((v) => !v)
+      } else if (e.key === 'Escape') {
+        if (showSearch) setShowSearch(false)
+        else if (selectedId) setSelectedId(null)
+        else if (showHelp) setShowHelp(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [phase.name, showSearch, selectedId, showHelp])
+
+  // Auto-trigger tour first time
+  useEffect(() => {
+    if (phase.name !== 'charted') return
+    try {
+      const done = localStorage.getItem(TOUR_STORAGE_KEY)
+      if (!done) {
+        const timer = setTimeout(() => setTourStep(0), 1200)
+        return () => clearTimeout(timer)
+      }
+    } catch {
+      // ignore
+    }
+  }, [phase.name])
+
+  // Auto-dismiss ready hint
+  useEffect(() => {
+    if (!readyHint) return
+    const timer = setTimeout(() => setReadyHint(false), 6000)
+    return () => clearTimeout(timer)
+  }, [readyHint])
+
+  const endTour = useCallback(() => {
+    setTourStep(null)
+    try { localStorage.setItem(TOUR_STORAGE_KEY, '1') } catch { /* ignore */ }
+  }, [])
+
+  const restartTour = useCallback(() => {
+    setTourStep(0)
+  }, [])
+
+  // Search match set
+  const searchMatch = useMemo(() => {
+    if (!search.trim() || phase.name !== 'charted') return undefined
+    const q = search.toLowerCase()
+    const set = new Set<number>()
+    for (const n of phase.chart.nodes) {
+      if (n.name.toLowerCase().includes(q) || n.file.toLowerCase().includes(q)) {
+        set.add(n.id)
+      }
+    }
+    return set
+  }, [search, phase])
+
+  const currentChart = phase.name === 'charted' ? phase.chart : null
+  const newIds = useMemo(() => {
+    if (!currentChart) return new Set<number>()
+    return new Set(phase.name === 'charted' ? (phase.delta?.added.map((n) => n.id) ?? []) : [])
+  }, [phase, currentChart])
 
   return (
-    <div className="sheet">
+    <div className="sheet" lang={lang}>
       <div className="grain" />
       <div className="vignette" />
       <LanguageSelector />
@@ -325,33 +406,83 @@ export function App() {
         </div>
       )}
 
-      {phase.name === 'charted' && (
+      {phase.name === 'charted' && currentChart && (
         <div className="chart-view">
           <div className="chart-main">
             <ChartCanvas
-              chart={phase.chart}
+              chart={currentChart}
               selectedId={selectedId}
-              newIds={new Set(phase.delta?.added.map((n) => n.id) ?? [])}
+              newIds={newIds}
               onSelect={setSelectedId}
+              highlightKind={filterKind === 'all' ? null : filterKind}
+              hideRocks={hideRocks}
+              newOnly={newOnly}
+              searchMatch={searchMatch}
             />
+            <div className="chart-toolbar" data-anim>
+              <div className="toolbar-group">
+                <span className="toolbar-label">{t.filters.title}:</span>
+                <button
+                  className={`chip ${filterKind === 'all' ? 'active' : ''}`}
+                  onClick={() => setFilterKind('all')}
+                >
+                  {t.filters.all}
+                </button>
+                <button
+                  className={`chip ${filterKind === 'function' ? 'active' : ''}`}
+                  onClick={() => setFilterKind('function')}
+                >
+                  {t.filters.functions}
+                </button>
+                <button
+                  className={`chip ${filterKind === 'method' ? 'active' : ''}`}
+                  onClick={() => setFilterKind('method')}
+                >
+                  {t.filters.methods}
+                </button>
+                <button
+                  className={`chip ${filterKind === 'class' ? 'active' : ''}`}
+                  onClick={() => setFilterKind('class')}
+                >
+                  {t.filters.classes}
+                </button>
+                <button
+                  className={`chip ${hideRocks ? 'active' : ''}`}
+                  onClick={() => setHideRocks((v) => !v)}
+                >
+                  {hideRocks ? t.filters.showRocks : t.filters.hideRocks}
+                </button>
+                <button
+                  className={`chip ${newOnly ? 'active' : ''}`}
+                  onClick={() => setNewOnly((v) => !v)}
+                >
+                  {t.filters.newOnly}
+                </button>
+              </div>
+              <div className="toolbar-group">
+                <button className="chip icon" onClick={restartTour} title={t.tourAgain}>
+                  ?
+                </button>
+              </div>
+            </div>
             <div className="chart-titleblock" data-anim>
               <p className="titleblock-kicker">{t.labels.surveyOf}</p>
               <h2>{phase.title}</h2>
               {(() => {
-                const { grade } = gradeChart(phase.chart)
+                const { grade } = gradeChart(currentChart)
                 return (
                   <>
                     <div className="stat-row">
                       <div className="stat">
-                        <span className="stat-num">{phase.chart.nodes.length}</span>
+                        <span className="stat-num">{currentChart.nodes.length}</span>
                         <span className="stat-label">{t.labels.symbols}</span>
                       </div>
                       <div className="stat">
-                        <span className="stat-num">{phase.chart.edges.length}</span>
+                        <span className="stat-num">{currentChart.edges.length}</span>
                         <span className="stat-label">{t.labels.routes}</span>
                       </div>
                       <div className="stat">
-                        <span className="stat-num">{phase.chart.fileCount}</span>
+                        <span className="stat-num">{currentChart.fileCount}</span>
                         <span className="stat-label">{t.labels.files}</span>
                       </div>
                       <div className="stat stat-grade">
@@ -411,12 +542,122 @@ export function App() {
             </div>
           </div>
           <SidePanel
-            chart={phase.chart}
+            chart={currentChart}
             selectedId={selectedId}
             delta={phase.delta}
             onSelect={setSelectedId}
           />
         </div>
+      )}
+
+      {/* Search overlay */}
+      {showSearch && phase.name === 'charted' && (
+        <div className="search-overlay" onClick={() => setShowSearch(false)}>
+          <div className="search-box" onClick={(e) => e.stopPropagation()}>
+            <input
+              autoFocus
+              type="text"
+              className="search-input"
+              placeholder={t.search.placeholder}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setShowSearch(false)
+                if (e.key === 'Enter' && searchMatch && searchMatch.size > 0) {
+                  const first = searchMatch.values().next().value
+                  if (typeof first === 'number') {
+                    setSelectedId(first)
+                    setShowSearch(false)
+                  }
+                }
+              }}
+            />
+            <div className="search-meta">
+              {search && searchMatch && (
+                <span>
+                  {searchMatch.size} {searchMatch.size === 1 ? t.search.result : t.search.results}
+                </span>
+              )}
+            </div>
+            {searchMatch && searchMatch.size > 0 && (
+              <div className="search-results">
+                {Array.from(searchMatch).slice(0, 10).map((id) => {
+                  const n = currentChart?.nodes.find((nn) => nn.id === id)
+                  if (!n) return null
+                  return (
+                    <button
+                      key={id}
+                      className="search-result"
+                      onClick={() => { setSelectedId(id); setShowSearch(false) }}
+                    >
+                      <span className="search-result-name">{n.name}</span>
+                      <span className="search-result-file">{n.file}:{n.row}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            {search && searchMatch && searchMatch.size === 0 && (
+              <div className="search-empty">{t.search.empty}</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Hotkey help overlay */}
+      {showHelp && (
+        <div className="help-overlay" onClick={() => setShowHelp(false)}>
+          <div className="help-card" onClick={(e) => e.stopPropagation()}>
+            <h2>{t.help.title}</h2>
+            <p className="help-intro">{t.help.intro}</p>
+            <div className="help-grid">
+              <div className="help-section">
+                <h3>Navigation</h3>
+                <div className="help-row"><kbd>drag</kbd><span>{t.help.pan}</span></div>
+                <div className="help-row"><kbd>scroll</kbd><span>{t.help.zoom}</span></div>
+                <div className="help-row"><kbd>0</kbd><span>{t.help.reset}</span></div>
+                <div className="help-row"><kbd>← ↑ → ↓</kbd><span>Pan</span></div>
+                <div className="help-row"><kbd>+ −</kbd><span>Zoom</span></div>
+              </div>
+              <div className="help-section">
+                <h3>Selection</h3>
+                <div className="help-row"><kbd>click</kbd><span>{t.help.select}</span></div>
+                <div className="help-row"><kbd>esc</kbd><span>{t.help.deselect}</span></div>
+              </div>
+              <div className="help-section">
+                <h3>Search & filter</h3>
+                <div className="help-row"><kbd>/</kbd><span>{t.help.search}</span></div>
+                <div className="help-row"><kbd>F</kbd><span>{t.help.filter}</span></div>
+                <div className="help-row"><kbd>H</kbd><span>Hide rocks</span></div>
+                <div className="help-row"><kbd>Ctrl N</kbd><span>New only</span></div>
+              </div>
+              <div className="help-section">
+                <h3>Help</h3>
+                <div className="help-row"><kbd>?</kbd><span>{t.showHelp}</span></div>
+                <div className="help-row"><kbd>tour</kbd><span>{t.tourAgain}</span></div>
+              </div>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => setShowHelp(false)}>
+              {t.help.done}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Ready hint */}
+      {readyHint && phase.name === 'charted' && (
+        <div className="ready-hint" onClick={() => setReadyHint(false)}>
+          <div className="ready-hint-kicker">{t.chartReady}</div>
+          <div className="ready-hint-body">{t.chartReadyBody}</div>
+          <button className="ready-hint-tour" onClick={(e) => { e.stopPropagation(); setReadyHint(false); restartTour() }}>
+            {t.tourAgain}
+          </button>
+        </div>
+      )}
+
+      {/* Tour */}
+      {tourStep !== null && phase.name === 'charted' && (
+        <Tour step={tourStep} onNext={() => setTourStep((s) => (s == null ? null : s + 1))} onBack={() => setTourStep((s) => (s == null ? null : Math.max(0, s - 1)))} onSkip={endTour} onDone={endTour} />
       )}
     </div>
   )
