@@ -99,6 +99,7 @@ export function ChartCanvas({
   const [hoverId, setHoverId] = useState<number | null>(null)
   const [tooltip, setTooltip] = useState<{ x: number; y: number; node: NodePos } | null>(null)
   const [showMiniMap, setShowMiniMap] = useState(true)
+  const [miniMapTick, setMiniMapTick] = useState(0)
   const [mounted, setMounted] = useState(false)
 
   // Re-tick the layout so node positions feel physical (d3-force)
@@ -118,7 +119,6 @@ export function ChartCanvas({
       const p = pos.get(n.id)
       if (!p) continue
       const importance = Math.sqrt(n.inbound + n.outbound)
-      // Gephi-style radius curve: pronounced but bounded
       const r = 5 + Math.min(importance * 2.2, 22)
       const isRock = n.inbound === 0 && n.outbound === 0
       const isNew = newIds.has(n.id)
@@ -171,16 +171,6 @@ export function ChartCanvas({
       })
     }
 
-    // Filter handling
-    const filteredIds = new Set<number>()
-    for (const n of chart.nodes) {
-      if (hideRocks && n.inbound === 0 && n.outbound === 0) continue
-      if (newOnly && !newIds.has(n.id)) continue
-      if (highlightKind && highlightKind !== 'all' && n.kind !== highlightKind) continue
-      filteredIds.add(n.id)
-    }
-
-    // Fade handling: selection or search-related
     const incident = new Set<number>()
     if (selectedId != null) {
       incident.add(selectedId)
@@ -213,14 +203,12 @@ export function ChartCanvas({
       const na = map.get(e.source)
       const nb = map.get(e.target)
       if (!na || !nb) return []
-      // Edge curves: bezier with control point perpendicular, Gephi-style
       const dx = b.x - a.x
       const dy = b.y - a.y
       const len = Math.hypot(dx, dy) || 1
       const curvature = Math.min(0.18, 30 / Math.max(len, 50))
       const mx = (a.x + b.x) / 2 - dy * curvature
       const my = (a.y + b.y) / 2 + dx * curvature
-      // Shorten to land at the node's edge
       const ux = dx / len
       const uy = dy / len
       const ax = a.x + ux * (na.r + 1)
@@ -290,14 +278,14 @@ export function ChartCanvas({
     const cy = target.y
     const minX = aspect >= 1 ? cx - size / 2 : cx - size * aspect / 2
     const minY = aspect >= 1 ? cy - size / (2 * aspect) : cy - size / 2
-    const start = viewRef.current
+    const start = { ...viewRef.current }
     const end = { minX, minY, size }
     const duration = 700
     const startTime = performance.now()
     let raf = 0
     const animateView = (now: number) => {
       const t = Math.min(1, (now - startTime) / duration)
-      const e = 1 - Math.pow(1 - t, 3) // easeOutCubic
+      const e = 1 - Math.pow(1 - t, 3)
       const v = {
         minX: start.minX + (end.minX - start.minX) * e,
         minY: start.minY + (end.minY - start.minY) * e,
@@ -306,6 +294,7 @@ export function ChartCanvas({
       viewRef.current = v
       const svg = svgRef.current
       if (svg) svg.setAttribute('viewBox', `${v.minX} ${v.minY} ${v.size} ${v.size}`)
+      setMiniMapTick((t) => (t + 1) & 0xffff)
       if (t < 1) raf = requestAnimationFrame(animateView)
     }
     raf = requestAnimationFrame(animateView)
@@ -320,6 +309,7 @@ export function ChartCanvas({
     const render = () => {
       const v = viewRef.current
       svg.setAttribute('viewBox', `${v.minX} ${v.minY} ${v.size} ${v.size}`)
+      setMiniMapTick((t) => (t + 1) & 0xffff)
     }
     render()
 
@@ -346,7 +336,6 @@ export function ChartCanvas({
       drag.x = e.clientX
       drag.y = e.clientY
       render()
-      // Update tooltip position
       if (tooltip) setTooltip({ ...tooltip, x: e.clientX - rect.left, y: e.clientY - rect.top })
     }
     const onPointerUp = (e: PointerEvent) => {
@@ -486,21 +475,31 @@ export function ChartCanvas({
     setTooltip(null)
   }
 
-  // Decide which labels to render (Gephi always labels the visible/important ones)
-  const labelCutoff = 12 // only nodes above this radius get inline labels
+  const labelCutoff = 12
   const showAllLabels = nodeList.length <= 50
 
-  // Compute mini-map viewport rect
+  // Compute mini-map viewport rect — re-runs on every interaction via
+  // miniMapTick so the rect tracks pan/zoom/focus in real time.
   const miniMap = useMemo(() => {
     if (!bounds.size) return null
-    const mapSize = 160
-    const scale = mapSize / bounds.size
+    const mapSize = 168
     const v = viewRef.current
-    const vx = ((v.minX - bounds.minX) * scale)
-    const vy = ((v.minY - bounds.minY) * scale)
-    const vs = (v.size * scale)
-    return { scale, vx, vy, vs, size: mapSize, bounds }
-  }, [bounds, nodeList.length])
+    const visibleMinX = Math.max(v.minX, bounds.minX)
+    const visibleMinY = Math.max(v.minY, bounds.minY)
+    const visibleMaxX = Math.min(v.minX + v.size, bounds.maxX)
+    const visibleMaxY = Math.min(v.minY + v.size, bounds.maxY)
+    const scale = mapSize / bounds.size
+    return {
+      scale,
+      vx: (visibleMinX - bounds.minX) * scale,
+      vy: (visibleMinY - bounds.minY) * scale,
+      vs: (visibleMaxX - visibleMinX) * scale,
+      vsh: (visibleMaxY - visibleMinY) * scale,
+      size: mapSize,
+      bounds,
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bounds, nodeList.length, miniMapTick])
 
   return (
     <div ref={containerRef} className={`chart-canvas-2d ${mounted ? 'mounted' : ''}`}>
@@ -526,7 +525,6 @@ export function ChartCanvas({
 
         <rect x="-8000" y="-8000" width="16000" height="16000" fill="url(#bgGlow)" />
 
-        {/* Module halos: faint colored disks behind each module's cluster */}
         <g className="module-halos" opacity="0.18" pointerEvents="none">
           {(() => {
             const groups = new Map<string, { x: number; y: number; nodes: NodePos[] }>()
@@ -560,7 +558,6 @@ export function ChartCanvas({
           })()}
         </g>
 
-        {/* Edges */}
         <g className="edges">
           {edges.map((e, i) => {
             const stroke = e.incident
@@ -602,7 +599,6 @@ export function ChartCanvas({
           })}
         </g>
 
-        {/* Nodes */}
         <g className="nodes">
           {nodeList.map((n) => {
             const isSel = selectedId === n.id
@@ -621,7 +617,6 @@ export function ChartCanvas({
                 onMouseLeave={handleNodeLeave}
                 className={`node ${isSel ? 'selected' : ''} ${isHover ? 'hovered' : ''} ${n.isLighthouse ? 'lighthouse' : ''} ${n.isPort ? 'port' : ''} ${n.isRock ? 'rock' : ''} ${n.isExpedition ? 'expedition' : ''} ${n.isNew ? 'new' : ''} ${n.isSearchHit ? 'search-hit' : ''}`}
               >
-                {/* Outer halo for lighthouses / selected / new */}
                 {(isSel || n.isLighthouse || n.isNew) && (
                   <circle
                     r={n.r + 6}
@@ -632,11 +627,9 @@ export function ChartCanvas({
                     strokeDasharray={n.isNew && !isSel ? '2 2' : undefined}
                   />
                 )}
-                {/* Selection ring */}
                 {isSel && (
                   <circle r={n.r + 12} fill="none" stroke={PALETTE.goldBright} strokeWidth={0.4} opacity={0.4} />
                 )}
-                {/* Main circle */}
                 <circle
                   r={n.r}
                   fill={n.fill}
@@ -645,11 +638,9 @@ export function ChartCanvas({
                   strokeWidth={isSel ? 1.8 : isHover ? 1.4 : 0.8}
                   className="node-body"
                 />
-                {/* Expedition marker */}
                 {n.isExpedition && !n.isRock && (
                   <circle r={n.r * 0.5} fill="none" stroke={PALETTE.rose} strokeWidth={0.6} strokeDasharray="1 1.5" />
                 )}
-                {/* Label */}
                 {showLabel && (
                   <text
                     y={n.r + fontSize + 2}
@@ -670,7 +661,6 @@ export function ChartCanvas({
         </g>
       </svg>
 
-      {/* Tooltip */}
       {tooltip && !dragRef.current && (
         <div
           className="chart-tooltip"
@@ -694,37 +684,31 @@ export function ChartCanvas({
         </div>
       )}
 
-      {/* Mini-map */}
       {showMiniMap && miniMap && nodeList.length > 5 && (
-        <div className="mini-map" onClick={() => setShowMiniMap(false)}>
-          <svg viewBox={`0 0 ${miniMap.size} ${miniMap.size}`} width={miniMap.size} height={miniMap.size}>
-            <rect width={miniMap.size} height={miniMap.size} fill="rgba(10, 12, 20, 0.7)" stroke="rgba(239, 231, 211, 0.2)" />
-            {nodeList.map((n) => {
-              const x = (n.x - miniMap.bounds.minX) * miniMap.scale
-              const y = (n.y - miniMap.bounds.minY) * miniMap.scale
-              return (
-                <circle
-                  key={n.id}
-                  cx={x}
-                  cy={y}
-                  r={Math.max(1, n.r * miniMap.scale * 0.4)}
-                  fill={n.isFaded ? 'rgba(138, 130, 117, 0.3)' : n.fill}
-                  opacity={n.isFaded ? 0.3 : 0.9}
-                />
-              )
-            })}
-            <rect
-              x={miniMap.vx}
-              y={miniMap.vy}
-              width={miniMap.vs}
-              height={miniMap.vs}
-              fill="none"
-              stroke={PALETTE.gold}
-              strokeWidth="1.2"
-              pointerEvents="none"
-            />
-          </svg>
-        </div>
+        <MiniMap
+          size={miniMap.size}
+          scale={miniMap.scale}
+          bounds={miniMap.bounds}
+          vx={miniMap.vx}
+          vy={miniMap.vy}
+          vs={miniMap.vs}
+          vsh={miniMap.vsh}
+          nodes={nodeList}
+          onJump={(worldX, worldY) => {
+            const container = containerRef.current
+            if (!container) return
+            const rect = container.getBoundingClientRect()
+            const aspect = rect.width / rect.height
+            const v = viewRef.current
+            const minX = aspect >= 1 ? worldX - v.size / 2 : worldX - v.size * aspect / 2
+            const minY = aspect >= 1 ? worldY - v.size / (2 * aspect) : worldY - v.size / 2
+            viewRef.current = { ...v, minX, minY }
+            const svg = svgRef.current
+            if (svg) svg.setAttribute('viewBox', `${minX} ${minY} ${v.size} ${v.size}`)
+            setMiniMapTick((t) => (t + 1) & 0xffff)
+          }}
+          onClose={() => setShowMiniMap(false)}
+        />
       )}
     </div>
   )
@@ -738,4 +722,106 @@ function kindLabel(kind: string): string {
     case 'var': return 'Variable'
     default: return kind
   }
+}
+
+interface MiniMapProps {
+  size: number
+  scale: number
+  bounds: { minX: number; minY: number; maxX: number; maxY: number; size: number }
+  vx: number
+  vy: number
+  vs: number
+  vsh: number
+  nodes: NodePos[]
+  onJump: (worldX: number, worldY: number) => void
+  onClose: () => void
+}
+
+function MiniMap({ size, scale, bounds, vx, vy, vs, vsh, nodes, onJump, onClose }: MiniMapProps) {
+  const [hover, setHover] = useState<{ vx: number; vy: number } | null>(null)
+  const [dragging, setDragging] = useState(false)
+
+  const handlePointer = (e: React.PointerEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = ((e.clientX - rect.left) / rect.width) * size
+    const y = ((e.clientY - rect.top) / rect.height) * size
+    setHover({ vx: x, vy: y })
+    if (e.buttons & 1) {
+      setDragging(true)
+      onJump(
+        bounds.minX + x / scale,
+        bounds.minY + y / scale,
+      )
+    } else {
+      setDragging(false)
+    }
+  }
+
+  return (
+    <div
+      className="mini-map"
+      onPointerDown={(e) => e.stopPropagation()}
+      onPointerUp={(e) => e.stopPropagation()}
+    >
+      <div className="mini-map-header">
+        <span className="mini-map-title">Chart</span>
+        <button
+          className="mini-map-close"
+          onClick={(e) => { e.stopPropagation(); onClose() }}
+          title="Hide minimap"
+          aria-label="Hide minimap"
+        >
+          ×
+        </button>
+      </div>
+      <svg
+        viewBox={`0 0 ${size} ${size}`}
+        width={size}
+        height={size}
+        onPointerDown={(e) => { e.stopPropagation(); handlePointer(e) }}
+        onPointerMove={handlePointer}
+        onPointerUp={() => setDragging(false)}
+        onPointerLeave={() => { setHover(null); setDragging(false) }}
+        style={{ cursor: dragging ? 'grabbing' : 'crosshair' }}
+      >
+        <rect
+          width={size}
+          height={size}
+          fill="rgba(5, 6, 10, 0.85)"
+          stroke="rgba(212, 168, 87, 0.35)"
+        />
+        {nodes.map((n) => {
+          const x = (n.x - bounds.minX) * scale
+          const y = (n.y - bounds.minY) * scale
+          return (
+            <circle
+              key={n.id}
+              cx={x}
+              cy={y}
+              r={Math.max(0.8, n.r * scale * 0.45)}
+              fill={n.isFaded ? 'rgba(138, 130, 117, 0.3)' : n.fill}
+              opacity={n.isFaded ? 0.3 : 0.92}
+              pointerEvents="none"
+            />
+          )
+        })}
+        {hover && (
+          <>
+            <line x1={hover.vx} y1={0} x2={hover.vx} y2={size} stroke="rgba(212, 168, 87, 0.3)" strokeDasharray="2 2" pointerEvents="none" />
+            <line x1={0} y1={hover.vy} x2={size} y2={hover.vy} stroke="rgba(212, 168, 87, 0.3)" strokeDasharray="2 2" pointerEvents="none" />
+          </>
+        )}
+        <rect
+          x={vx}
+          y={vy}
+          width={vs}
+          height={vsh}
+          fill="rgba(242, 207, 128, 0.1)"
+          stroke={PALETTE.goldBright}
+          strokeWidth={1.4}
+          pointerEvents="none"
+        />
+      </svg>
+    </div>
+  )
 }

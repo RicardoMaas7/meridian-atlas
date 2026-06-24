@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from 'react'
-import type { CodeChart } from '../types'
+import type { ChartNode, CodeChart, DeclKind } from '../types'
 import { interpretChart, interpretNode, type Observation } from '../graph/interpret'
 import { relativeTime } from '../graph/snapshot'
 import type { SurveyDelta } from '../graph/snapshot'
@@ -41,7 +41,7 @@ function deltaObservation(delta: SurveyDelta, chart: CodeChart, t: ReturnType<ty
   }
 }
 
-function classifyNode(node: { inbound: number; outbound: number; kind: string; row: number; excerpt: string }): {
+function classifyNode(node: ChartNode): {
   label: string
   body: string
   badge?: string
@@ -83,37 +83,235 @@ function classifyNode(node: { inbound: number; outbound: number; kind: string; r
   return { label: 'unremarkable', body: '' }
 }
 
-function complexityBand(outbound: number): { band: 'low' | 'mid' | 'high'; label: string } {
+function complexityBand(outbound: number): { band: 'low' | 'mid' | 'high' | 'extreme'; label: string } {
+  if (outbound >= 15) return { band: 'extreme', label: 'extreme' }
   if (outbound >= 8) return { band: 'high', label: 'high' }
   if (outbound >= 4) return { band: 'mid', label: 'mid' }
   return { band: 'low', label: 'low' }
 }
 
-function estimateReach(chart: CodeChart, startId: number): { count: number; depth: number } {
+interface ReachData {
+  /** Total distinct symbols reachable from the start (BFS, depth 8). */
+  count: number
+  /** Maximum BFS depth that still found new symbols. */
+  depth: number
+  /** Out-degree at each depth layer (gives a sense of the "shape"). */
+  layers: number[]
+}
+
+/** BFS over the call graph. Direction depends on the node's role:
+ *  - for a port (entry point) we follow outbound (what it can reach)
+ *  - for a lighthouse (heavily-called) we follow inbound (what reaches it)
+ *  - otherwise we follow both and return the larger reachable set
+ */
+function estimateReach(chart: CodeChart, startId: number): ReachData {
+  const adjOut = new Map<number, number[]>()
+  const adjIn = new Map<number, number[]>()
+  for (const e of chart.edges) {
+    const out = adjOut.get(e.source)
+    if (out) out.push(e.target)
+    else adjOut.set(e.source, [e.target])
+    const inn = adjIn.get(e.target)
+    if (inn) inn.push(e.source)
+    else adjIn.set(e.target, [e.source])
+  }
+  const start = chart.nodes.find((n) => n.id === startId)
+  if (!start) return { count: 0, depth: 0, layers: [] }
+
+  const direction: 'out' | 'in' | 'both' =
+    start.inbound === 0 && start.outbound > 0
+      ? 'out'
+      : start.inbound > 5
+        ? 'in'
+        : 'both'
+
   const seen = new Set<number>([startId])
   let frontier = [startId]
   let depth = 0
+  const layers: number[] = []
   while (frontier.length > 0 && depth < 8) {
     const next: number[] = []
     for (const id of frontier) {
-      for (const e of chart.edges) {
-        if (e.source === id && !seen.has(e.target)) {
-          seen.add(e.target)
-          next.push(e.target)
+      const targets =
+        direction === 'out'
+          ? adjOut.get(id) ?? []
+          : direction === 'in'
+            ? adjIn.get(id) ?? []
+            : [...(adjOut.get(id) ?? []), ...(adjIn.get(id) ?? [])]
+      for (const t of targets) {
+        if (!seen.has(t)) {
+          seen.add(t)
+          next.push(t)
         }
       }
     }
     if (next.length === 0) break
+    layers.push(next.length)
     frontier = next
     depth++
   }
-  return { count: seen.size - 1, depth }
+  return { count: seen.size - 1, depth, layers }
+}
+
+interface CallSiteSummary {
+  /** Caller symbol id (or null if not in chart). */
+  id: number | null
+  name: string
+  file: string
+  row: number
+  charted: boolean
+  /** How many of the same call exist across the chart. */
+  count: number
+}
+
+/** Group the same source symbol's repeated calls so the panel can say
+ *  "called 3 times by X" instead of listing the same caller 3 times. */
+function groupCallers(chart: CodeChart, nodeId: number): CallSiteSummary[] {
+  const counts = new Map<number, { count: number; charted: boolean }>()
+  for (const e of chart.edges) {
+    if (e.target !== nodeId) continue
+    const cur = counts.get(e.source)
+    if (cur) {
+      cur.count++
+      if (e.charted) cur.charted = true
+    } else {
+      counts.set(e.source, { count: 1, charted: e.charted })
+    }
+  }
+  return [...counts.entries()]
+    .map(([id, { count, charted }]) => {
+      const n = chart.nodes.find((nn) => nn.id === id)
+      return {
+        id: n?.id ?? null,
+        name: n?.name ?? `#${id}`,
+        file: n?.file ?? '',
+        row: n?.row ?? 0,
+        charted,
+        count,
+      }
+    })
+    .sort((a, b) => b.count - a.count)
+}
+
+function groupCallees(chart: CodeChart, nodeId: number): CallSiteSummary[] {
+  const counts = new Map<number, { count: number; charted: boolean }>()
+  for (const e of chart.edges) {
+    if (e.source !== nodeId) continue
+    const cur = counts.get(e.target)
+    if (cur) {
+      cur.count++
+      if (e.charted) cur.charted = true
+    } else {
+      counts.set(e.target, { count: 1, charted: e.charted })
+    }
+  }
+  return [...counts.entries()]
+    .map(([id, { count, charted }]) => {
+      const n = chart.nodes.find((nn) => nn.id === id)
+      return {
+        id: n?.id ?? null,
+        name: n?.name ?? `#${id}`,
+        file: n?.file ?? '',
+        row: n?.row ?? 0,
+        charted,
+        count,
+      }
+    })
+    .sort((a, b) => b.count - a.count)
+}
+
+interface Recommendation {
+  severity: 'info' | 'good' | 'warn' | 'danger'
+  title: string
+  body: string
+}
+
+function recommendationsFor(node: ChartNode, sameModule: number): Recommendation[] {
+  const out: Recommendation[] = []
+  if (node.inbound === 0 && node.outbound === 0) {
+    out.push({
+      severity: 'warn',
+      title: 'No callers, no callees',
+      body: 'Either dead code, or called from outside the survey (a test, a template, a string reference). Search the project for the symbol name to confirm.',
+    })
+  }
+  if (node.outbound >= 15) {
+    out.push({
+      severity: 'danger',
+      title: 'Hub function',
+      body: 'This symbol calls many others directly. Consider whether some of those calls could be grouped or delegated so the call graph stays shallow.',
+    })
+  } else if (node.outbound >= 8) {
+    out.push({
+      severity: 'warn',
+      title: 'Many direct calls',
+      body: 'A wide call surface — easy to break on changes. Worth checking the cohesion of the called group.',
+    })
+  }
+  if (node.inbound >= 10) {
+    out.push({
+      severity: 'warn',
+      title: 'Heavy inbound traffic',
+      body: 'Many symbols depend on this one. A change here has a large blast radius — keep its surface stable and its tests thorough.',
+    })
+  } else if (node.inbound >= 5) {
+    out.push({
+      severity: 'info',
+      title: 'Lighthouse',
+      body: 'A change here reaches several call sites. Treat as a public API: small, focused, well-tested.',
+    })
+  }
+  if (sameModule === 0 && (node.inbound > 0 || node.outbound > 0)) {
+    out.push({
+      severity: 'info',
+      title: 'Crosses module boundaries',
+      body: 'This symbol is the only one from its module visible to the rest of the chart. It is the module\u2019s public face.',
+    })
+  }
+  if (node.kind === 'class' && node.outbound === 0 && node.inbound === 0) {
+    out.push({
+      severity: 'warn',
+      title: 'Unused class',
+      body: 'A class with no charted references or outgoing calls. Either instantiated via reflection or genuinely dead.',
+    })
+  }
+  if (out.length === 0) {
+    out.push({
+      severity: 'good',
+      title: 'Healthy shape',
+      body: 'Nothing stands out about this symbol — its inbound and outbound counts are in a normal range.',
+    })
+  }
+  return out
+}
+
+const KIND_LABELS: Record<DeclKind, string> = {
+  function: 'Function',
+  method: 'Method',
+  class: 'Class',
+  var: 'Assigned function',
+}
+
+function shortFile(file: string): string {
+  if (file.length <= 36) return file
+  return '…' + file.slice(-34)
+}
+
+function severityIcon(severity: Recommendation['severity']): string {
+  switch (severity) {
+    case 'good': return '✓'
+    case 'info': return '·'
+    case 'warn': return '!'
+    case 'danger': return '!!'
+  }
 }
 
 export function SidePanel({ chart, selectedId, delta, onSelect }: Props) {
   const { t } = useI18n()
   const [tab, setTab] = useState<'remarks' | 'glossary' | 'help'>('remarks')
   const [copied, setCopied] = useState(false)
+  const [showAllCallers, setShowAllCallers] = useState(false)
+  const [showAllCallees, setShowAllCallees] = useState(false)
 
   const byId = useMemo(() => new Map(chart.nodes.map((n) => [n.id, n])), [chart.nodes])
   const node = selectedId != null ? byId.get(selectedId) ?? null : null
@@ -126,6 +324,22 @@ export function SidePanel({ chart, selectedId, delta, onSelect }: Props) {
 
   const reach = useMemo(() => (node ? estimateReach(chart, node.id) : null), [chart, node])
   const classification = useMemo(() => (node ? classifyNode(node) : null), [node])
+  const sameModuleCount = useMemo(
+    () => (node ? chart.nodes.filter((n) => n.module === node.module && n.id !== node.id).length : 0),
+    [chart, node],
+  )
+  const groupedCallers = useMemo(
+    () => (node ? groupCallers(chart, node.id) : []),
+    [chart, node],
+  )
+  const groupedCallees = useMemo(
+    () => (node ? groupCallees(chart, node.id) : []),
+    [chart, node],
+  )
+  const recs = useMemo(
+    () => (node ? recommendationsFor(node, sameModuleCount) : []),
+    [node, sameModuleCount],
+  )
 
   const onCopy = async () => {
     if (!node) return
@@ -169,11 +383,10 @@ export function SidePanel({ chart, selectedId, delta, onSelect }: Props) {
     )
   }
 
-  const inboundEdges = chart.edges.filter((e) => e.target === node.id)
-  const outboundEdges = chart.edges.filter((e) => e.source === node.id)
-  const reading = interpretNode(chart, node)
   const complexity = complexityBand(node.outbound)
-  const sameModuleCount = chart.nodes.filter((n) => n.module === node.module && n.id !== node.id).length
+  const visibleCallers = showAllCallers ? groupedCallers : groupedCallers.slice(0, 8)
+  const visibleCallees = showAllCallees ? groupedCallees : groupedCallees.slice(0, 8)
+  const reading = interpretNode(chart, node)
 
   return (
     <aside className="side-panel">
@@ -190,7 +403,7 @@ export function SidePanel({ chart, selectedId, delta, onSelect }: Props) {
       </div>
 
       <div className="node-detail">
-        <p className="panel-kicker">{t.kinds[node.kind]}</p>
+        <p className="panel-kicker">{KIND_LABELS[node.kind]}</p>
         <h3>{node.name}</h3>
         <p className="position">
           <span className="position-file" title={node.file}>{shortFile(node.file)}</span>
@@ -214,12 +427,10 @@ export function SidePanel({ chart, selectedId, delta, onSelect }: Props) {
             <div className="figure">{node.outbound}</div>
             <div className="caption">{t.labels.callsOut}</div>
           </div>
-          {reach && (
-            <div>
-              <div className="figure small">{reach.count}</div>
-              <div className="caption">{t.node.reach}</div>
-            </div>
-          )}
+          <div>
+            <div className="figure small">{reach?.count ?? 0}</div>
+            <div className="caption">{t.node.reach}</div>
+          </div>
         </div>
 
         {reading && reading !== classification?.body && (
@@ -233,84 +444,109 @@ export function SidePanel({ chart, selectedId, delta, onSelect }: Props) {
           </div>
           <div className="meta-row">
             <span className="meta-label">{t.node.kind}</span>
-            <span className="meta-value">{t.kinds[node.kind]}</span>
+            <span className="meta-value">{KIND_LABELS[node.kind]}</span>
           </div>
           <div className="meta-row">
             <span className="meta-label">{t.node.complexity}</span>
             <span className={`meta-value complexity-${complexity.band}`}>
-              {t.node[`complexity${complexity.band.charAt(0).toUpperCase() + complexity.band.slice(1)}` as 'complexityLow' | 'complexityMid' | 'complexityHigh']}
+              {t.node[`complexity${complexity.band.charAt(0).toUpperCase() + complexity.band.slice(1)}` as 'complexityLow' | 'complexityMid' | 'complexityHigh' | 'complexityExt']}
               <span className="meta-sub"> · {node.outbound} {t.node.callsOut}</span>
             </span>
           </div>
           <div className="meta-row">
             <span className="meta-label">{t.node.reach}</span>
             <span className="meta-value">
-              {reach?.count ?? 0} <span className="meta-sub">{t.node.reachDesc}</span>
+              {reach?.count ?? 0}
+              <span className="meta-sub"> symbols · depth {reach?.depth ?? 0}</span>
             </span>
           </div>
+          {sameModuleCount > 0 && (
+            <div className="meta-row">
+              <span className="meta-label">{t.node.module} siblings</span>
+              <span className="meta-value">{sameModuleCount}</span>
+            </div>
+          )}
         </div>
 
+        {/* Recommendations */}
+        {recs.length > 0 && (
+          <div className="recs">
+            <p className="panel-kicker">Read</p>
+            {recs.map((r, i) => (
+              <div key={i} className={`rec rec-${r.severity}`}>
+                <span className={`rec-icon rec-icon-${r.severity}`}>{severityIcon(r.severity)}</span>
+                <div>
+                  <div className="rec-title">{r.title}</div>
+                  <p className="rec-body">{r.body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="route-list">
-          {inboundEdges.length > 0 ? (
+          {groupedCallers.length > 0 ? (
             <>
               <h4>
                 {t.labels.routesInbound}
-                <span className="route-count">{inboundEdges.length}</span>
+                <span className="route-count">
+                  {groupedCallers.reduce((acc, c) => acc + c.count, 0)}
+                </span>
               </h4>
-              {inboundEdges
-                .sort((a, b) => (b.charted ? 1 : 0) - (a.charted ? 1 : 0))
-                .slice(0, 12)
-                .map((e) => {
-                  const from = byId.get(e.source)
-                  if (!from) return null
-                  return (
-                    <button
-                      key={`in-${e.source}`}
-                      onClick={() => onSelect(from.id)}
-                      className="route-button"
-                    >
-                      <span className="route-arrow">←</span>
-                      <span className="route-name">{from.name}</span>
-                      <span className="route-file">{shortFile(from.file)}</span>
-                      {!e.charted && <span className="est"> {t.labels.estimated}</span>}
-                    </button>
-                  )
-                })}
-              {inboundEdges.length > 12 && (
-                <div className="route-more">+{inboundEdges.length - 12} more</div>
+              {visibleCallers.map((c) => (
+                <button
+                  key={c.id ?? c.name}
+                  onClick={() => c.id != null && onSelect(c.id)}
+                  className="route-button"
+                >
+                  <span className="route-arrow">←</span>
+                  <span className="route-name">{c.name}</span>
+                  {c.count > 1 && <span className="route-times">×{c.count}</span>}
+                  <span className="route-file">{shortFile(c.file)}</span>
+                  {!c.charted && <span className="est">{t.labels.estimated}</span>}
+                </button>
+              ))}
+              {groupedCallers.length > 8 && (
+                <button
+                  className="route-more-btn"
+                  onClick={() => setShowAllCallers((v) => !v)}
+                >
+                  {showAllCallers ? 'show less' : `+${groupedCallers.length - 8} more`}
+                </button>
               )}
             </>
           ) : (
             <p className="route-empty">{t.node.noIncoming}</p>
           )}
 
-          {outboundEdges.length > 0 ? (
+          {groupedCallees.length > 0 ? (
             <>
               <h4>
                 {t.labels.routesOutbound}
-                <span className="route-count">{outboundEdges.length}</span>
+                <span className="route-count">
+                  {groupedCallees.reduce((acc, c) => acc + c.count, 0)}
+                </span>
               </h4>
-              {outboundEdges
-                .sort((a, b) => (b.charted ? 1 : 0) - (a.charted ? 1 : 0))
-                .slice(0, 12)
-                .map((e) => {
-                  const to = byId.get(e.target)
-                  if (!to) return null
-                  return (
-                    <button
-                      key={`out-${e.target}`}
-                      onClick={() => onSelect(to.id)}
-                      className="route-button"
-                    >
-                      <span className="route-arrow">→</span>
-                      <span className="route-name">{to.name}</span>
-                      <span className="route-file">{shortFile(to.file)}</span>
-                      {!e.charted && <span className="est"> {t.labels.estimated}</span>}
-                    </button>
-                  )
-                })}
-              {outboundEdges.length > 12 && (
-                <div className="route-more">+{outboundEdges.length - 12} more</div>
+              {visibleCallees.map((c) => (
+                <button
+                  key={c.id ?? c.name}
+                  onClick={() => c.id != null && onSelect(c.id)}
+                  className="route-button"
+                >
+                  <span className="route-arrow">→</span>
+                  <span className="route-name">{c.name}</span>
+                  {c.count > 1 && <span className="route-times">×{c.count}</span>}
+                  <span className="route-file">{shortFile(c.file)}</span>
+                  {!c.charted && <span className="est">{t.labels.estimated}</span>}
+                </button>
+              ))}
+              {groupedCallees.length > 8 && (
+                <button
+                  className="route-more-btn"
+                  onClick={() => setShowAllCallees((v) => !v)}
+                >
+                  {showAllCallees ? 'show less' : `+${groupedCallees.length - 8} more`}
+                </button>
               )}
             </>
           ) : (
@@ -348,11 +584,6 @@ export function SidePanel({ chart, selectedId, delta, onSelect }: Props) {
   )
 }
 
-function shortFile(file: string): string {
-  if (file.length <= 36) return file
-  return '…' + file.slice(-34)
-}
-
 function ObservationSection({
   obs,
   index,
@@ -369,7 +600,7 @@ function ObservationSection({
         {obs.title}
       </h4>
       <p>{obs.body}</p>
-      {obs.refs && (
+      {obs.refs && obs.refs.length > 0 && (
         <div className="observation-refs">
           {obs.refs.map((ref, j) => (
             <Fragment key={ref.id}>

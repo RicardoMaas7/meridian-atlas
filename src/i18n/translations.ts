@@ -151,6 +151,7 @@ export interface Translations {
     complexityLow: string
     complexityMid: string
     complexityHigh: string
+    complexityExt: string
   }
   resurveying: string
   noChanges: string
@@ -357,6 +358,7 @@ const en: Translations = {
     complexityLow: 'Tidy',
     complexityMid: 'Worth a look',
     complexityHigh: 'Hub',
+    complexityExt: 'Refactor candidate',
   },
   resurveying: 'Re-surveying\u2026',
   noChanges: 'The waters are unchanged.',
@@ -563,6 +565,7 @@ const es: Translations = {
     complexityLow: 'Ordenado',
     complexityMid: 'A revisar',
     complexityHigh: 'Hub',
+    complexityExt: 'A refactorizar',
   },
   resurveying: 'Relevantando…',
   noChanges: 'Las aguas no han cambiado.',
