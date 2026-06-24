@@ -263,23 +263,23 @@ const en: Translations = {
     steps: {
       welcome: {
         title: 'A chart of your code',
-        body: 'Every circle is a function, method, class or variable. Every line is a call from one to another. The chart is laid out by force, so closely connected code clusters together.',
+        body: 'Every circle is a function, method, class or variable. Every line is a call from one to another. The chart is laid out by force, so closely connected code clusters together. Drag to pan, scroll to zoom.',
       },
       nodes: {
         title: 'Reading the marks',
-        body: 'A larger mark means a more-traveled symbol. Gold rings are charted routes \u2014 calls the parser can prove. Copper is a "rock" \u2014 nothing in this survey calls it, and it calls nothing. A dashed gold ring means the symbol is new since your last survey.',
+        body: 'A larger mark means a more-traveled symbol. The pulsing circle is a real symbol from your code — its size grows with the number of times it is called. A solid gold ring means it has charted routes; a dashed ring means it is new since your last survey.',
       },
       edges: {
         title: 'Following the routes',
-        body: 'Solid gold lines are proven calls. Dashed dim lines are "estimated" \u2014 calls matched by name only, where the parser could not pin them to a single definition. The arrowhead shows the direction of the call.',
+        body: 'The lines leaving the highlighted symbol are calls it makes. Solid gold lines are proven calls — the parser saw them and resolved them. Dashed dim lines are estimated: matched by name, not pinned to a single definition. The arrowhead shows the direction of the call.',
       },
       select: {
         title: 'Pick a symbol',
-        body: 'Click any node. The panel on the right opens with everything we know about it: who calls it, what it calls, the chart\u2019s reading of it, and a copy of its source.',
+        body: 'Click any node to open its entry on the right. The panel shows who calls it, what it calls, its kind, complexity, and a copy of its source. Click another node to switch; click empty water to deselect.',
       },
       sidepanel: {
         title: 'The remarks',
-        body: 'The numbered notes on the right are the chart\u2019s observations: lighthouses (most-called), ports of departure (entry points), rocks (dead code), straits (where modules couple), and islands (groups that never speak to each other).',
+        body: 'The numbered notes are the chart’s own observations about the codebase: lighthouses (most-called), ports of departure (entry points), rocks (dead code), straits (where modules couple), and islands (groups that never speak to each other).',
       },
       legend: {
         title: 'Legend',
@@ -469,23 +469,23 @@ const es: Translations = {
     steps: {
       welcome: {
         title: 'Una carta de tu código',
-        body: 'Cada círculo es una función, método, clase o variable. Cada línea es una llamada de uno a otro. La carta se ordena por fuerzas, por lo que el código muy conectado se agrupa.',
+        body: 'Cada círculo es una función, método, clase o variable. Cada línea es una llamada de uno a otro. La carta se ordena por fuerzas, por lo que el código muy conectado se agrupa. Arrastra para mover, scroll para zoom.',
       },
       nodes: {
         title: 'Leyendo las marcas',
-        body: 'Una marca más grande significa un símbolo más transitado. Anillos dorados son rutas trazadas — llamadas que el parser puede probar. Cobre es una "roca" — nada en este levantamiento la llama, y no llama a nada. Un anillo dorado punteado significa que el símbolo es nuevo desde tu último levantamiento.',
+        body: 'Una marca más grande significa un símbolo más transitado. El círculo que pulsa es un símbolo real de tu código — su tamaño crece con el número de veces que se le llama. Un anillo dorado sólido significa que tiene rutas trazadas; un anillo punteado significa que es nuevo desde tu último levantamiento.',
       },
       edges: {
         title: 'Siguiendo las rutas',
-        body: 'Líneas doradas sólidas son llamadas probadas. Líneas tenues punteadas son "estimadas" — llamadas que coinciden solo por nombre, donde el parser no pudo fijarlas a una sola definición. La punta de flecha muestra la dirección de la llamada.',
+        body: 'Las líneas que salen del símbolo resaltado son llamadas que él hace. Las líneas doradas sólidas son llamadas probadas — el parser las vio y las resolvió. Las líneas tenues punteadas son estimadas: coinciden por nombre, no se fijan a una sola definición. La punta de flecha muestra la dirección.',
       },
       select: {
         title: 'Elige un símbolo',
-        body: 'Haz clic en cualquier nodo. El panel de la derecha se abre con todo lo que sabemos de él: quién lo llama, qué llama, la lectura de la carta sobre él, y una copia de su código.',
+        body: 'Haz clic en cualquier nodo para abrir su entrada a la derecha. El panel muestra quién lo llama, qué llama, su tipo, complejidad, y una copia de su código. Haz clic en otro nodo para cambiar; clic en el agua para deseleccionar.',
       },
       sidepanel: {
         title: 'Las notas',
-        body: 'Las notas numeradas a la derecha son las observaciones de la carta: faros (los más llamados), puertos de partida (puntos de entrada), rocas (código muerto), estrechos (donde se acoplan los módulos), e islas (grupos que no se hablan entre sí).',
+        body: 'Las notas numeradas son las observaciones de la carta sobre el código: faros (los más llamados), puertos de partida (puntos de entrada), rocas (código muerto), estrechos (donde se acoplan los módulos), e islas (grupos que no se hablan entre sí).',
       },
       legend: {
         title: 'Leyenda',

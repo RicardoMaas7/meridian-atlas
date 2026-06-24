@@ -341,7 +341,7 @@ export function App() {
     <div className="sheet" lang={lang}>
       <div className="grain" />
       <div className="vignette" />
-      <LanguageSelector />
+      {phase.name !== 'charted' && <LanguageSelector />}
       <input
         ref={fileInputRef}
         type="file"
@@ -411,6 +411,7 @@ export function App() {
       {phase.name === 'charted' && currentChart && (
         <div className="chart-view">
           <div className="chart-main">
+            <LanguageSelector />
             <ChartCanvas
               chart={currentChart}
               selectedId={selectedId}
