@@ -4,13 +4,13 @@ import { interpretChart, interpretNode } from './interpret'
 
 const makeNode = (overrides: Partial<{
   id: number; name: string; file: string; kind: DeclKind;
-  inbound: number; outbound: number;
+  inbound: number; outbound: number; module: string;
 }> = {}) => ({
   id: overrides.id ?? 0,
   name: overrides.name ?? 'fn',
   file: overrides.file ?? 'a.ts',
   kind: overrides.kind ?? 'function',
-  module: '/',
+  module: overrides.module ?? '/',
   row: 1,
   excerpt: 'fn() {}',
   x: 0,
@@ -136,6 +136,60 @@ describe('interpretChart', () => {
     const observations = interpretChart(chart)
     const clean = observations.find(o => o.title === 'Clean separation')
     expect(clean).toBeDefined()
+  })
+
+  it('detects dead exports (public surface nobody uses)', () => {
+    const chart = makeChart([
+      makeNode({ id: 0, name: 'helper', outbound: 3 }),
+      makeNode({ id: 1, name: 'unused', outbound: 5 }),
+      makeNode({ id: 2, name: 'caller', inbound: 1, outbound: 2 }),
+    ], [
+      { source: 0, target: 2, charted: true },
+      { source: 2, target: 1, charted: true },
+    ], ['lib'])
+    const observations = interpretChart(chart)
+    const dead = observations.find(o => o.title.includes('dead export'))
+    expect(dead).toBeDefined()
+  })
+
+  it('detects cascade risk when a hub fans out into many called-by-many symbols', () => {
+    // core (id 0) calls into 4 lighthouses (each called by 4+ other
+    // symbols). The blast radius is the sum of those inbounds = 4*4
+    // = 16, well above the 8 threshold.
+    const chart = makeChart([
+      makeNode({ id: 0, name: 'core', file: 'a.ts', module: 'core', outbound: 4 }),
+      makeNode({ id: 1, name: 'svc1', file: 'b.ts', module: 'svc', inbound: 4 }),
+      makeNode({ id: 2, name: 'svc2', file: 'c.ts', module: 'svc', inbound: 4 }),
+      makeNode({ id: 3, name: 'svc3', file: 'd.ts', module: 'svc', inbound: 4 }),
+      makeNode({ id: 4, name: 'svc4', file: 'e.ts', module: 'svc', inbound: 4 }),
+    ], [
+      { source: 0, target: 1, charted: true },
+      { source: 0, target: 2, charted: true },
+      { source: 0, target: 3, charted: true },
+      { source: 0, target: 4, charted: true },
+    ], ['core', 'svc'])
+    const observations = interpretChart(chart)
+    const cascade = observations.find(o => o.title === 'Cascade risk')
+    expect(cascade).toBeDefined()
+  })
+
+  it('detects tangled modules with high internal density', () => {
+    const nodes = []
+    for (let i = 0; i < 8; i++) {
+      nodes.push(makeNode({ id: i, name: `n${i}`, file: `mod/f${i}.ts`, module: 'mod' }))
+    }
+    const edges = []
+    // Almost fully connected inside the module
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = 0; j < nodes.length; j++) {
+        if (i !== j) edges.push({ source: i, target: j, charted: true })
+      }
+    }
+    const chart = makeChart(nodes, edges, ['mod'])
+    chart.fileCount = 8
+    const observations = interpretChart(chart)
+    const tangled = observations.find(o => o.title === 'Tangled module')
+    expect(tangled).toBeDefined()
   })
 })
 

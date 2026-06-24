@@ -1,4 +1,4 @@
-import type { ChartNode, CodeChart } from '../types'
+import type { ChartNode, ChartEdge, CodeChart } from '../types'
 
 /**
  * Remarks: the numbered marginal notes printed on a chart. Written like a
@@ -11,6 +11,119 @@ export interface Observation {
   refs?: { id: number; name: string }[]
 }
 
+function findWithPathCompression(parent: Map<number, number>, a: number): number {
+  let root = a
+  while (parent.get(root) !== root) root = parent.get(root)!
+  let cur = a
+  while (parent.get(cur) !== cur) {
+    const next = parent.get(cur)!
+    parent.set(cur, root)
+    cur = next
+  }
+  return root
+}
+
+function unionNodes(parent: Map<number, number>, a: number, b: number): void {
+  const ra = findWithPathCompression(parent, a)
+  const rb = findWithPathCompression(parent, b)
+  if (ra !== rb) parent.set(ra, rb)
+}
+
+/** Detect God modules: a module with many internal connections that
+ *  is a tangled ball rather than a layered system. */
+function detectGodModules(nodes: ChartNode[], edges: ChartEdge[]): Array<{ name: string; score: number }> {
+  const moduleNodes = new Map<string, ChartNode[]>()
+  for (const n of nodes) {
+    const list = moduleNodes.get(n.module) ?? []
+    list.push(n)
+    moduleNodes.set(n.module, list)
+  }
+  const moduleEdgeCount = new Map<string, number>()
+  for (const e of edges) {
+    const a = nodes.find((n) => n.id === e.source)
+    const b = nodes.find((n) => n.id === e.target)
+    if (!a || !b || a.module !== b.module) continue
+    moduleEdgeCount.set(a.module, (moduleEdgeCount.get(a.module) ?? 0) + 1)
+  }
+  const results: Array<{ name: string; score: number }> = []
+  for (const [m, list] of moduleNodes) {
+    const n = list.length
+    if (n < 8) continue
+    const e = moduleEdgeCount.get(m) ?? 0
+    const max = n * (n - 1)
+    if (max === 0) continue
+    const density = e / max
+    if (density > 0.3) {
+      results.push({ name: m, score: density })
+    }
+  }
+  return results.sort((a, b) => b.score - a.score)
+}
+
+/** Detect dead exports: symbols defined but never called, in modules
+ *  that have at least one called symbol. Likely public surface that
+ *  nobody uses — or used from outside the survey. */
+function detectDeadExports(nodes: ChartNode[]): ChartNode[] {
+  const moduleHasCalls = new Map<string, boolean>()
+  for (const n of nodes) {
+    if (n.inbound > 0) moduleHasCalls.set(n.module, true)
+  }
+  return nodes
+    .filter((n) =>
+      n.inbound === 0 &&
+      n.outbound > 0 &&
+      (moduleHasCalls.get(n.module) ?? false),
+    )
+    .sort((a, b) => b.outbound - a.outbound)
+    .slice(0, 3)
+}
+
+/** Find cascade risk: a symbol that, when changed, propagates widely
+ *  through its outbound call tree (weighted by the inbound traffic
+ *  of each reachable node). */
+function detectCascadeRisk(nodes: ChartNode[], edges: ChartEdge[]): Array<{ name: string; blastRadius: number }> {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const cascadeNodes: Array<{ name: string; blastRadius: number }> = []
+  for (const n of nodes) {
+    if (n.outbound < 1) continue
+    const seen = new Set<number>([n.id])
+    let frontier: number[] = []
+    for (const e of edges) {
+      if (e.source === n.id && !seen.has(e.target)) {
+        seen.add(e.target)
+        frontier.push(e.target)
+      }
+    }
+    let depth = 0
+    while (frontier.length > 0 && depth < 4) {
+      const next: number[] = []
+      for (const id of frontier) {
+        for (const e of edges) {
+          if (e.source === id && !seen.has(e.target)) {
+            seen.add(e.target)
+            next.push(e.target)
+          }
+        }
+      }
+      frontier = next
+      depth++
+    }
+    const reachable = seen.size - 1
+    // Weight by each reachable node's inbound, so a leaf that is
+    // itself a lighthouse counts for more than a leaf nobody calls.
+    let weight = 0
+    for (const id of seen) {
+      if (id === n.id) continue
+      const target = byId.get(id)
+      if (target) weight += Math.max(1, target.inbound)
+    }
+    if (reachable >= 3 && weight >= 8) {
+      cascadeNodes.push({ name: n.name, blastRadius: weight })
+    }
+  }
+  return cascadeNodes.sort((a, b) => b.blastRadius - a.blastRadius).slice(0, 3)
+}
+
 export function interpretChart(chart: CodeChart): Observation[] {
   const observations: Observation[] = []
   const { nodes, edges } = chart
@@ -18,23 +131,12 @@ export function interpretChart(chart: CodeChart): Observation[] {
 
   // --- connected components (islands) ---
   const parent = new Map<number, number>()
-  const find = (a: number): number => {
-    let root = a
-    while (parent.get(root) !== root) root = parent.get(root)!
-    let cur = a
-    while (parent.get(cur) !== cur) {
-      const next = parent.get(cur)!
-      parent.set(cur, root)
-      cur = next
-    }
-    return root
-  }
   for (const n of nodes) parent.set(n.id, n.id)
-  for (const e of edges) parent.set(find(e.source), find(e.target))
+  for (const e of edges) unionNodes(parent, e.source, e.target)
 
   const components = new Map<number, ChartNode[]>()
   for (const n of nodes) {
-    const root = find(n.id)
+    const root = findWithPathCompression(parent, n.id)
     const list = components.get(root) ?? []
     list.push(n)
     components.set(root, list)
@@ -59,7 +161,7 @@ export function interpretChart(chart: CodeChart): Observation[] {
     })
   }
 
-  // --- lighthouses: the most depended-upon symbols ---
+  // --- lighthouses ---
   const lighthouses = [...nodes]
     .sort((a, b) => b.inbound - a.inbound)
     .slice(0, 3)
@@ -72,7 +174,7 @@ export function interpretChart(chart: CodeChart): Observation[] {
     })
   }
 
-  // --- ports of departure: entry points ---
+  // --- ports of departure ---
   const ports = nodes
     .filter((n) => n.inbound === 0 && n.outbound >= 3)
     .sort((a, b) => b.outbound - a.outbound)
@@ -85,7 +187,7 @@ export function interpretChart(chart: CodeChart): Observation[] {
     })
   }
 
-  // --- uncharted rocks: no routes at all ---
+  // --- uncharted rocks ---
   const rocks = nodes.filter((n) => n.inbound === 0 && n.outbound === 0)
   if (rocks.length > 0) {
     observations.push({
@@ -95,7 +197,36 @@ export function interpretChart(chart: CodeChart): Observation[] {
     })
   }
 
-  // --- estimated waters: how much of the chart is heuristic ---
+  // --- dead exports: public surface nobody uses ---
+  const deadExports = detectDeadExports(nodes)
+  if (deadExports.length > 0) {
+    observations.push({
+      title: `${deadExports.length} dead export${deadExports.length === 1 ? '' : 's'}`,
+      body: 'Symbols defined in modules with active code, but called by nothing in the survey. Possibly public surface nobody uses — or used from outside (tests, plugins).',
+      refs: deadExports.map((n) => ({ id: n.id, name: `${n.name} (${n.outbound} out)` })),
+    })
+  }
+
+  // --- cascade risk ---
+  const cascade = detectCascadeRisk(nodes, edges)
+  if (cascade.length > 0) {
+    observations.push({
+      title: 'Cascade risk',
+      body: `Changes to these symbols would propagate to ${cascade[0].blastRadius}+ call sites through their dependents.`,
+      refs: cascade.map((c) => ({ id: 0, name: `${c.name} (→${c.blastRadius})` })),
+    })
+  }
+
+  // --- god modules ---
+  const godModules = detectGodModules(nodes, edges)
+  if (godModules.length > 0) {
+    observations.push({
+      title: 'Tangled module',
+      body: `Module "${godModules[0].name}" has high internal coupling. Its symbols form a dense graph rather than a layered system — refactor candidate.`,
+    })
+  }
+
+  // --- estimated waters ---
   const estimated = edges.filter((e) => !e.charted).length
   if (edges.length > 0) {
     const pct = Math.round((estimated / edges.length) * 100)
@@ -107,7 +238,7 @@ export function interpretChart(chart: CodeChart): Observation[] {
     }
   }
 
-  // --- straits: coupling between modules ---
+  // --- straits ---
   if (chart.modules.length > 1) {
     const byId = new Map(nodes.map((n) => [n.id, n]))
     const pairCounts = new Map<string, number>()

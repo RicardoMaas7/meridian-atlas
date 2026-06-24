@@ -19,7 +19,14 @@ import { SidePanel } from './SidePanel'
 import { LanguageSelector } from './LanguageSelector'
 import { Tour } from './Tour'
 import { useI18n } from '../i18n/context'
-import { tauriAvailable, pickDirectory, scanDirectoryNative } from '../native/fs'
+import {
+  tauriAvailable,
+  pickDirectory,
+  scanDirectoryNative,
+  exportSnapshot,
+  importSnapshot,
+  watchSnapshot,
+} from '../native/fs'
 import { listen } from '@tauri-apps/api/event'
 
 const WATCH_INTERVAL_MS = 15_000
@@ -228,9 +235,41 @@ export function App() {
 
   useEffect(() => {
     if (!watching) return
-    const timer = setInterval(resurvey, WATCH_INTERVAL_MS)
-    return () => clearInterval(timer)
-  }, [watching, resurvey])
+    let cancelled = false
+    let lastSnapshot: Record<string, number> = {}
+    const tick = async () => {
+      if (cancelled) return
+      const root = nativeDirRef.current
+      if (!root) return
+      let current: Record<string, number> = {}
+      try {
+        if (isNative) {
+          current = await watchSnapshot(root)
+        }
+      } catch {
+        // ignore
+      }
+      if (cancelled) return
+      const changed =
+        Object.keys(current).length !== Object.keys(lastSnapshot).length ||
+        Object.entries(current).some(([k, v]) => lastSnapshot[k] !== v) ||
+        Object.keys(lastSnapshot).some((k) => !(k in current))
+      lastSnapshot = current
+      if (changed) {
+        const c = phaseRef.current
+        if (c.name === 'charted') {
+          void runSurvey(scanDirectoryNative(root), c.title, true)
+        }
+      }
+    }
+    // Initial snapshot, then poll.
+    void tick()
+    const timer = setInterval(tick, WATCH_INTERVAL_MS)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [watching, isNative, runSurvey])
 
   useEffect(() => {
     if (!isNative) return
@@ -248,6 +287,27 @@ export function App() {
         resurvey()
       } else if (action === 'about') {
         alert(`${t.labels.title}\nA navigational chart of your code.\nNative desktop app.`)
+      } else if (action === 'export_chart') {
+        const c = phaseRef.current
+        if (c.name === 'charted') {
+          const payload = {
+            title: c.title,
+            exportedAt: new Date().toISOString(),
+            nodes: c.chart.nodes.map((n) => ({
+              id: n.id, name: n.name, kind: n.kind, file: n.file,
+              module: n.module, row: n.row, excerpt: n.excerpt,
+            })),
+            edges: c.chart.edges,
+            modules: c.chart.modules,
+          }
+          void exportSnapshot(payload)
+        }
+      } else if (action === 'import_chart') {
+        void (async () => {
+          const data = await importSnapshot()
+          if (!data) return
+          alert('Imported snapshot contains ' + ((data as { nodes?: unknown[] }).nodes?.length ?? 0) + ' symbols. Snapshot import is read-only in this build.')
+        })()
       }
     }).then((fn) => {
       unlisten = fn
@@ -465,6 +525,37 @@ export function App() {
                 </button>
               </div>
               <div className="toolbar-group">
+                <button
+                  className="chip"
+                  onClick={() => {
+                    const c = phaseRef.current
+                    if (c.name !== 'charted') return
+                    const payload = {
+                      title: c.title,
+                      exportedAt: new Date().toISOString(),
+                      nodes: c.chart.nodes,
+                      edges: c.chart.edges,
+                      modules: c.chart.modules,
+                      delta: c.delta,
+                    }
+                    void exportSnapshot(payload)
+                  }}
+                  title="Export as JSON"
+                >
+                  ↓ JSON
+                </button>
+                <button
+                  className="chip"
+                  onClick={async () => {
+                    const data = await importSnapshot()
+                    if (data && (data as { nodes?: unknown[] }).nodes) {
+                      alert('Imported ' + (data as { nodes?: unknown[] }).nodes!.length + ' symbols. Use the desktop app menu File → Import for full restoration.')
+                    }
+                  }}
+                  title="Import from JSON"
+                >
+                  ↑ JSON
+                </button>
                 <button className="chip icon" onClick={restartTour} title={t.tourAgain}>
                   ?
                 </button>
