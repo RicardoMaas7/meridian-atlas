@@ -642,7 +642,7 @@ body {
 
 .chart-svg .node-label {
   paint-order: stroke;
-  stroke: rgba(5, 6, 10, 0.9);
+  stroke: color-mix(in srgb, var(--void) 90%, transparent);
   stroke-width: 3.5px;
   stroke-linejoin: round;
   letter-spacing: 0.02em;
@@ -805,13 +805,10 @@ body {
   position: absolute;
   bottom: 16px;
   right: 16px;
-  background: rgba(5, 6, 10, 0.92);
-  border: 1px solid var(--gold-soft);
-  z-index: 5;
-  backdrop-filter: blur(4px);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6), 0 0 16px rgba(212, 168, 87, 0.1);
-  transition: border-color 0.2s ease, transform 0.2s ease;
-  user-select: none;
+  background: color-mix(in srgb, var(--void-soft) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--ink-hairline);
+  z-index: 2;
 }
 
 .mini-map:hover {
@@ -857,7 +854,7 @@ body {
 .chart-titleblock {
   grid-area: title;
   padding: 24px 36px 20px 36px;
-  background: linear-gradient(180deg, transparent, rgba(5, 6, 10, 0.7));
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--void) 70%, transparent));
   border-top: 1px solid var(--ink-hairline);
 }
 
@@ -1039,7 +1036,7 @@ body {
   letter-spacing: 0.08em;
   color: var(--ink-dim);
   border-top: 1px solid var(--ink-hairline);
-  background: rgba(5, 6, 10, 0.85);
+  background: color-mix(in srgb, var(--void-soft) 85%, transparent);
   backdrop-filter: blur(8px);
 }
 
@@ -1099,7 +1096,7 @@ body {
   position: fixed;
   inset: 0;
   z-index: 200;
-  background: rgba(5, 6, 10, 0.6);
+  background: color-mix(in srgb, var(--void) 60%, transparent);
   backdrop-filter: blur(6px);
   display: flex;
   align-items: flex-start;
@@ -1207,7 +1204,7 @@ body {
   position: fixed;
   inset: 0;
   z-index: 200;
-  background: rgba(5, 6, 10, 0.7);
+  background: color-mix(in srgb, var(--void) 70%, transparent);
   backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
@@ -1364,7 +1361,7 @@ body {
   position: absolute;
   border: 2px solid var(--gold-bright);
   box-shadow:
-    0 0 0 9999px rgba(5, 6, 10, 0.78),
+    0 0 0 9999px color-mix(in srgb, var(--void) 78%, transparent),
     0 0 30px var(--gold-soft);
   border-radius: 6px;
   animation: spotlightPulse 2.4s ease-in-out infinite;
@@ -1375,13 +1372,13 @@ body {
 @keyframes spotlightPulse {
   0%, 100% {
     box-shadow:
-      0 0 0 9999px rgba(5, 6, 10, 0.78),
+      0 0 0 9999px color-mix(in srgb, var(--void) 78%, transparent),
       0 0 18px var(--gold-soft);
     border-color: var(--gold-bright);
   }
   50% {
     box-shadow:
-      0 0 0 9999px rgba(5, 6, 10, 0.72),
+      0 0 0 9999px color-mix(in srgb, var(--void) 72%, transparent),
       0 0 42px var(--gold);
     border-color: var(--gold);
   }
