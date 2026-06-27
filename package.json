@@ -20,7 +20,6 @@
     "build:tauri": "tauri build",
     "build:mcp": "esbuild mcp/server.ts --bundle --platform=node --target=node20 --format=esm --packages=external --outfile=dist-mcp/server.mjs",
     "tauri": "tauri",
-    "prepare": "pnpm run build:mcp",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
