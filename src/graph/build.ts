@@ -4,34 +4,56 @@ import type { PreciseResolver } from './scip'
 
 const MAX_DASHED_CANDIDATES = 8
 
+export interface BuildMetrics {
+  filesScanned: number
+  filesSkipped: number
+  symbolsExtracted: number
+  startedAt: number
+  finishedAt: number
+}
+
+export interface BuildResult {
+  chart: CodeChart
+  metrics: BuildMetrics
+}
+
 export async function buildChart(
   files: FileEntry[],
   onProgress?: (done: number, total: number) => void,
   precise?: PreciseResolver,
 ): Promise<CodeChart> {
+  const result = await buildChartWithMetrics(files, onProgress, precise)
+  return result.chart
+}
+
+export async function buildChartWithMetrics(
+  files: FileEntry[],
+  onProgress?: (done: number, total: number) => void,
+  precise?: PreciseResolver,
+): Promise<BuildResult> {
+  const startedAt = performance.now()
   let counter = 0
   const nextId = () => counter++
 
   const decls: Decl[] = []
   const calls: CallRef[] = []
+  let filesSkipped = 0
 
   for (let i = 0; i < files.length; i++) {
     let result
     try {
       result = await extractFile(files[i], nextId)
     } catch (err) {
-      // extractFile already swallows its own errors and returns empty
-      // results, but keep this guard for catastrophic failures (e.g.
-      // a future tree-sitter bug that escapes the parser).
       if (typeof console !== 'undefined') {
         console.warn(`[meridian] buildChart skipped ${files[i].path}:`, err)
       }
       result = { decls: [], calls: [] }
+      filesSkipped++
     }
     decls.push(...result.decls)
     calls.push(...result.calls)
     onProgress?.(i + 1, files.length)
-    if (i % 25 === 24) await new Promise((r) => setTimeout(r)) // keep the UI breathing
+    if (i % 25 === 24) await new Promise((r) => setTimeout(r))
   }
 
   // Name → candidate declarations, split by how a call site can reach them.
@@ -132,7 +154,7 @@ export async function buildChart(
 
   const modules = [...new Set(nodes.map((n) => n.module))].sort()
   const preciseUsed = !!precise && files.some((f) => precise.covers(f.path))
-  return {
+  const chart: CodeChart = {
     nodes,
     edges,
     modules,
@@ -140,4 +162,12 @@ export async function buildChart(
     unresolvedCalls: unresolved,
     precise: preciseUsed,
   }
+  const metrics: BuildMetrics = {
+    filesScanned: files.length,
+    filesSkipped,
+    symbolsExtracted: decls.length,
+    startedAt: Math.round(startedAt),
+    finishedAt: Math.round(performance.now()),
+  }
+  return { chart, metrics }
 }

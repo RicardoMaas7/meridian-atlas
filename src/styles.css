@@ -35,11 +35,43 @@ html, body, #root {
   margin: 0;
 }
 
+html { color-scheme: dark; }
+html[data-theme="light"] { color-scheme: light; }
+
 body {
   background: var(--void);
   color: var(--ink);
   font-family: var(--serif);
   overflow: hidden;
+}
+
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---------- Focus states ---------- */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--gold-glow);
+}
+.btn:focus-visible,
+.chip:focus-visible,
+.lang-btn:focus-visible,
+.copy-btn:focus-visible,
+.ready-hint-tour:focus-visible,
+.theme-toggle:focus-visible,
+.mini-map-close:focus-visible,
+.route-more-btn:focus-visible,
+.sibling-btn:focus-visible {
+  outline-offset: 3px;
 }
 
 /* ---------- Sheet container ---------- */
@@ -109,7 +141,7 @@ body {
   padding: 5px 10px;
   cursor: pointer;
   color: var(--ink-dim);
-  transition: all 0.2s;
+  transition: color 0.2s, background-color 0.2s, border-color 0.2s, opacity 0.2s, transform 0.2s;
   border-radius: 1px;
 }
 
@@ -243,7 +275,7 @@ body {
   letter-spacing: 0.2em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: color 0.3s, background-color 0.3s, border-color 0.3s, opacity 0.3s, transform 0.3s, box-shadow 0.3s;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -438,17 +470,33 @@ body {
   overflow: hidden;
 }
 
-.chart-canvas-2d::before {
+.chart-canvas-2d::after {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 0;
+  background:
+    radial-gradient(1px 1px at 8% 8%, rgba(239, 231, 211, 0.4), transparent),
+    radial-gradient(1px 1px at 92% 18%, rgba(239, 231, 211, 0.4), transparent),
+    radial-gradient(1px 1px at 22% 88%, rgba(239, 231, 211, 0.4), transparent),
+    radial-gradient(1px 1px at 78% 78%, rgba(239, 231, 211, 0.4), transparent),
+    radial-gradient(1px 1px at 50% 50%, rgba(239, 231, 211, 0.4), transparent);
+  background-size: 300% 300%;
+  animation: twinkle 8s ease-in-out infinite;
+  opacity: 0.5;
+}
+
+/* Soft "isobath" concentric rings drifting outward from the center of
+   the chart, evoking bathymetric contours on a real nautical chart. */
+.chart-canvas-2d::before {
   background-image:
     /* Nebula clouds */
     radial-gradient(ellipse 320px 180px at 18% 22%, rgba(74, 143, 197, 0.18), transparent 70%),
     radial-gradient(ellipse 280px 200px at 82% 75%, rgba(200, 120, 86, 0.14), transparent 70%),
     radial-gradient(ellipse 380px 240px at 55% 45%, rgba(168, 100, 200, 0.1), transparent 70%),
+    /* Drifting isobath rings */
+    radial-gradient(circle at 50% 50%, transparent 0, transparent 110px, rgba(212, 168, 87, 0.04) 110px, transparent 130px, transparent 230px, rgba(212, 168, 87, 0.04) 230px, transparent 250px, transparent 380px, rgba(212, 168, 87, 0.03) 380px, transparent 400px, transparent 560px, rgba(212, 168, 87, 0.025) 560px, transparent 580px),
     /* Distant bright stars */
     radial-gradient(1.2px 1.2px at 20% 30%, rgba(255, 255, 255, 0.85), transparent),
     radial-gradient(1.2px 1.2px at 75% 20%, rgba(242, 207, 128, 0.85), transparent),
@@ -474,24 +522,11 @@ body {
   background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%;
   background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0;
   opacity: 0.85;
-  animation: driftStars 120s linear infinite;
+  animation: driftStars 120s linear infinite, isobathPulse 18s ease-in-out infinite;
 }
-
-.chart-canvas-2d::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background:
-    radial-gradient(1px 1px at 8% 8%, rgba(239, 231, 211, 0.4), transparent),
-    radial-gradient(1px 1px at 92% 18%, rgba(239, 231, 211, 0.4), transparent),
-    radial-gradient(1px 1px at 22% 88%, rgba(239, 231, 211, 0.4), transparent),
-    radial-gradient(1px 1px at 78% 78%, rgba(239, 231, 211, 0.4), transparent),
-    radial-gradient(1px 1px at 50% 50%, rgba(239, 231, 211, 0.4), transparent);
-  background-size: 300% 300%;
-  animation: twinkle 8s ease-in-out infinite;
-  opacity: 0.5;
+@keyframes isobathPulse {
+  0%, 100% { filter: hue-rotate(0deg); }
+  50%      { filter: hue-rotate(8deg); }
 }
 
 @keyframes driftStars {
@@ -792,7 +827,7 @@ body {
   padding: 4px 8px;
   color: var(--ink-dim);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: color 0.2s, background-color 0.2s, border-color 0.2s, opacity 0.2s, transform 0.2s;
   white-space: nowrap;
 }
 
@@ -873,6 +908,29 @@ body {
   font-size: 12px;
   color: var(--ink-dim);
   margin: 0 0 12px 0;
+}
+
+.titleblock-log {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin: 0 0 14px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 6px 12px;
+  border-left: 1px solid var(--ink-hairline);
+  background: rgba(239, 231, 211, 0.02);
+  animation: logIn 0.6s 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+.titleblock-log-sep { color: var(--ink-hairline); }
+.titleblock-log-warn { color: var(--copper); }
+@keyframes logIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 .titleblock-actions {
@@ -999,7 +1057,6 @@ body {
   font-family: var(--display);
   font-size: 24px;
   padding: 18px 20px;
-  outline: none;
   box-sizing: border-box;
 }
 
@@ -1198,7 +1255,7 @@ body {
   padding: 5px 12px;
   margin-top: 10px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: color 0.2s, background-color 0.2s, border-color 0.2s, opacity 0.2s, transform 0.2s;
 }
 
 .ready-hint-tour:hover {
@@ -1393,7 +1450,7 @@ body {
   color: var(--ink-dim);
   cursor: pointer;
   border-bottom: 1.5px solid transparent;
-  transition: all 0.2s;
+  transition: color 0.2s, background-color 0.2s, border-color 0.2s, opacity 0.2s, transform 0.2s;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -1616,7 +1673,7 @@ body {
   padding: 7px 8px 7px 10px;
   cursor: pointer;
   margin-bottom: 1px;
-  transition: all 0.2s;
+  transition: color 0.2s, background-color 0.2s, border-color 0.2s, opacity 0.2s, transform 0.2s;
   overflow: hidden;
 }
 
@@ -1856,6 +1913,75 @@ body {
 
 .excerpt-header .panel-kicker { margin: 0; }
 
+/* ---------- Depth chart (small BFS bar chart) ---------- */
+
+.depth-chart {
+  margin: 18px 0 22px 0;
+  padding: 14px 14px 10px 14px;
+  border: 1px solid var(--ink-hairline);
+  background: rgba(239, 231, 211, 0.02);
+  animation: statIn 0.7s 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+.depth-chart-title {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+.depth-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 64px;
+  margin-bottom: 4px;
+}
+.depth-bar {
+  flex: 1 1 0;
+  min-width: 6px;
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold-soft));
+  position: relative;
+  animation: barRise 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  transform-origin: bottom;
+}
+.depth-bar:nth-child(1) { animation-delay: 0.4s; }
+.depth-bar:nth-child(2) { animation-delay: 0.5s; }
+.depth-bar:nth-child(3) { animation-delay: 0.6s; }
+.depth-bar:nth-child(4) { animation-delay: 0.7s; }
+.depth-bar:nth-child(5) { animation-delay: 0.8s; }
+.depth-bar:nth-child(6) { animation-delay: 0.9s; }
+.depth-bar:nth-child(7) { animation-delay: 1.0s; }
+.depth-bar:nth-child(8) { animation-delay: 1.1s; }
+@keyframes barRise {
+  from { transform: scaleY(0); opacity: 0; }
+  to   { transform: scaleY(1); opacity: 1; }
+}
+.depth-bar-num {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 8.5px;
+  color: var(--gold-bright);
+  white-space: nowrap;
+}
+.depth-axis {
+  display: flex;
+  gap: 3px;
+}
+.depth-axis-tick {
+  flex: 1 1 0;
+  min-width: 6px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  color: var(--ink-dim);
+  letter-spacing: 0.04em;
+}
+
 .copy-btn {
   font-family: var(--mono);
   font-size: 10px;
@@ -1866,7 +1992,7 @@ body {
   color: var(--ink-mid);
   padding: 4px 10px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: color 0.2s, background-color 0.2s, border-color 0.2s, opacity 0.2s, transform 0.2s;
   font-weight: 500;
 }
 
@@ -1914,7 +2040,7 @@ body {
   border: 1px solid var(--ink-hairline);
   padding: 3px 8px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: color 0.15s, background-color 0.15s, border-color 0.15s, opacity 0.15s, transform 0.15s;
 }
 
 .sibling-btn:hover {
@@ -2004,4 +2130,305 @@ body {
     border-top: 1px solid var(--ink-hairline);
     max-height: 45vh;
   }
+}
+
+/* ---------- Light theme (parchment) ---------- */
+
+[data-theme="light"] {
+  --void: #f2e9d8;
+  --void-soft: #ebe1cb;
+  --ink: #2a2419;
+  --ink-dim: #6e6555;
+  --ink-faint: rgba(42, 36, 25, 0.4);
+  --ink-hairline: rgba(42, 36, 25, 0.14);
+  --ink-mid: rgba(42, 36, 25, 0.65);
+  --gold: #a87a26;
+  --gold-bright: #8a6018;
+  --gold-soft: rgba(168, 122, 38, 0.5);
+  --gold-glow: rgba(168, 122, 38, 0.18);
+  --copper: #a44a2a;
+  --azure: #2c6aa0;
+  --crystal: #4a8fc5;
+  --rose: #b53a2a;
+}
+
+[data-theme="light"] .grain { mix-blend-mode: multiply; opacity: 0.25; }
+[data-theme="light"] .vignette { background: radial-gradient(ellipse at center, transparent 50%, rgba(120, 90, 40, 0.18) 100%); }
+[data-theme="light"] .chart-canvas-2d {
+  background: radial-gradient(ellipse 80% 60% at 50% 50%, #f6efde 0%, #ece2c8 60%, #e1d6b8 100%);
+}
+[data-theme="light"] .chart-canvas-2d::before { opacity: 0.55; }
+[data-theme="light"] .chart-canvas-2d::after { opacity: 0.3; }
+[data-theme="light"] .chart-svg .node-label {
+  stroke: rgba(242, 233, 216, 0.95);
+}
+[data-theme="light"] .grain {
+  background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.4 0 0 0 0 0.32 0 0 0 0 0.2 0 0 0 0.08 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+/* ---------- Theme toggle button ---------- */
+
+.theme-toggle {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 12, 20, 0.6);
+  border: 1px solid var(--ink-hairline);
+  backdrop-filter: blur(8px);
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition: color 0.25s, background-color 0.25s, border-color 0.25s, opacity 0.25s, transform 0.25s;
+  border-radius: 1px;
+}
+.theme-toggle:hover {
+  color: var(--gold);
+  border-color: var(--gold-soft);
+  transform: rotate(15deg);
+}
+.theme-toggle svg { transition: transform 0.3s ease; }
+.theme-toggle:active { transform: scale(0.92); }
+
+/* ---------- Recents card ---------- */
+
+.recents-card {
+  width: 520px;
+  max-width: 90vw;
+  max-height: 70vh;
+  background: rgba(10, 12, 20, 0.96);
+  border: 1px solid var(--gold-soft);
+  box-shadow: 0 16px 60px rgba(0, 0, 0, 0.6), 0 0 30px rgba(212, 168, 87, 0.1);
+  animation: searchBoxIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.recents-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 22px 8px 22px;
+  border-bottom: 1px solid var(--ink-hairline);
+}
+
+.recents-kicker {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin: 0;
+  font-weight: 500;
+}
+
+.recents-close {
+  background: none;
+  border: none;
+  color: var(--ink-dim);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.recents-close:hover { color: var(--rose); }
+
+.recents-empty {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--ink-dim);
+  text-align: center;
+  padding: 32px 24px;
+  margin: 0;
+}
+
+.recents-note {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 12px;
+  color: var(--ink-dim);
+  margin: 0;
+  padding: 14px 22px 0 22px;
+  line-height: 1.5;
+}
+
+.recents-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.recents-item {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--ink-hairline);
+}
+.recents-item:last-child { border-bottom: none; }
+
+.recents-pick {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 2px 12px;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 12px 8px 12px 22px;
+  cursor: pointer;
+  font-family: var(--mono);
+  color: var(--ink);
+  transition: background 0.15s;
+}
+.recents-pick:hover {
+  background: rgba(212, 168, 87, 0.08);
+}
+
+.recents-name {
+  font-family: var(--display);
+  font-size: 18px;
+  color: var(--gold-bright);
+  font-weight: 500;
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.recents-path {
+  font-size: 10.5px;
+  color: var(--ink-dim);
+  grid-column: 1;
+  grid-row: 2;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+
+.recents-time {
+  font-size: 9.5px;
+  color: var(--ink-dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  padding-right: 8px;
+}
+
+.recents-remove {
+  width: 36px;
+  background: none;
+  border: none;
+  border-left: 1px solid var(--ink-hairline);
+  color: var(--ink-dim);
+  font-size: 18px;
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s, border-color 0.15s, opacity 0.15s, transform 0.15s;
+}
+.recents-remove:hover {
+  color: var(--rose);
+  background: rgba(255, 125, 107, 0.06);
+}
+
+/* ---------- Toolbar chip "+" before PNG/SVG/JSON ---------- */
+
+.toolbar-group .chip {
+  position: relative;
+}
+
+/* Subtle hover-lift for the chart canvas */
+.chart-canvas-2d.mounted {
+  animation: canvasEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+@keyframes canvasEnter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Compass rose — purely decorative, sits behind everything */
+.compass-rose {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 220px;
+  height: 220px;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  filter: blur(0.4px);
+}
+.compass-rose svg { animation: compassFloat 14s ease-in-out infinite; }
+.compass-rose .compass-rose-ticks { animation: compassRotate 240s linear infinite; transform-origin: 50% 50%; }
+.compass-rose .compass-rose-star { animation: compassRotate 360s linear infinite reverse; transform-origin: 50% 50%; }
+@keyframes compassFloat {
+  0%, 100% { opacity: 0.32; }
+  50%      { opacity: 0.5; }
+}
+@keyframes compassRotate {
+  to { transform: rotate(360deg); }
+}
+[data-theme="light"] .compass-rose { opacity: 0.18; }
+
+/* The "stat-num grade" letter gets a soft reveal animation when the
+   chart re-mounts. */
+.stat-grade .stat-num.grade {
+  animation: gradeIn 0.9s 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  display: inline-block;
+}
+@keyframes gradeIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.85); letter-spacing: 0.4em; }
+  to   { opacity: 1; transform: translateY(0)   scale(1);    letter-spacing: 0; }
+}
+
+/* Module halos glow softly when something is selected */
+.chart-svg .module-halos circle {
+  transition: opacity 0.5s ease, stroke-opacity 0.5s ease;
+}
+.chart-svg:has(.node.selected) .module-halos circle {
+  opacity: 0.28;
+}
+
+/* Title-block numeric stat counters animate when a new chart loads */
+.chart-titleblock .stat-num {
+  animation: statIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+.chart-titleblock .stat:nth-child(1) .stat-num { animation-delay: 0.15s; }
+.chart-titleblock .stat:nth-child(2) .stat-num { animation-delay: 0.25s; }
+.chart-titleblock .stat:nth-child(3) .stat-num { animation-delay: 0.35s; }
+.chart-titleblock .stat:nth-child(4) .stat-num { animation-delay: 0.45s; }
+@keyframes statIn {
+  from { opacity: 0; transform: translateY(12px); filter: blur(4px); }
+  to   { opacity: 1; transform: translateY(0);    filter: blur(0); }
+}
+
+/* Hovering over a node gives the rest of the chart a slight darken */
+.chart-canvas-2d.has-hover .node:not(.hovered):not(.selected) .node-body {
+  filter: brightness(0.7);
+  transition: filter 0.3s ease;
+}
+
+/* Surveying pulse */
+@keyframes surveyRotate {
+  to { transform: rotate(360deg); }
+}
+.surveying-pulse::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border: 1px dashed var(--gold-soft);
+  border-radius: 50%;
+  animation: surveyRotate 6s linear infinite;
+  pointer-events: none;
+}
+.surveying-pulse { position: relative; }
+
+/* The chip active state gets a small gold underline */
+.chip.active {
+  position: relative;
+  box-shadow: 0 1px 0 0 var(--gold) inset, 0 -1px 0 0 var(--gold-bright) inset;
 }

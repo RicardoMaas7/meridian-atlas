@@ -50,6 +50,21 @@ export interface Translations {
     nativeApp: string
     webApp: string
     chartFolderHint: string
+    recents: string
+    recentsTitle: string
+    recentsEmpty: string
+    recentsRemove: string
+    recentsClose: string
+    recentsNativeOnly: string
+    themeToggle: string
+    exportJSON: string
+    exportSVG: string
+    exportPNG: string
+    importJSON: string
+    restartTour: string
+    openInEditor: string
+    snapshotImported: string
+    snapshotImportedBody: string
   }
   kinds: {
     function: string
@@ -215,6 +230,21 @@ const en: Translations = {
     nativeApp: 'Desktop app',
     webApp: 'Web version',
     chartFolderHint: 'Choose a folder from your machine',
+    recents: 'recent',
+    recentsTitle: 'Recent charts',
+    recentsEmpty: 'No charts yet — chart a folder and it will appear here.',
+    recentsRemove: 'Remove',
+    recentsClose: 'Close',
+    recentsNativeOnly: 'Recents open automatically in the desktop app. On the web, pick the folder again.',
+    themeToggle: 'Toggle theme',
+    exportJSON: 'Export JSON',
+    exportSVG: 'Export SVG',
+    exportPNG: 'Export PNG',
+    importJSON: 'Import JSON',
+    restartTour: 'Restart the tour',
+    openInEditor: 'Open in editor',
+    snapshotImported: 'Snapshot imported',
+    snapshotImportedBody: 'The JSON was read but full restoration is not yet supported in this build.',
   },
   kinds: {
     function: 'Function',
@@ -422,6 +452,21 @@ const es: Translations = {
     nativeApp: 'App de escritorio',
     webApp: 'Versión web',
     chartFolderHint: 'Elige una carpeta de tu máquina',
+    recents: 'recientes',
+    recentsTitle: 'Cartas recientes',
+    recentsEmpty: 'Aún no hay cartas — explora una carpeta y aparecerá aquí.',
+    recentsRemove: 'Quitar',
+    recentsClose: 'Cerrar',
+    recentsNativeOnly: 'Las recientes se abren solas en la app de escritorio. En la web, vuelve a elegir la carpeta.',
+    themeToggle: 'Cambiar tema',
+    exportJSON: 'Exportar JSON',
+    exportSVG: 'Exportar SVG',
+    exportPNG: 'Exportar PNG',
+    importJSON: 'Importar JSON',
+    restartTour: 'Repetir el tour',
+    openInEditor: 'Abrir en el editor',
+    snapshotImported: 'Snapshot importado',
+    snapshotImportedBody: 'El JSON se leyó, pero la restauración completa aún no está disponible en esta build.',
   },
   kinds: {
     function: 'Función',

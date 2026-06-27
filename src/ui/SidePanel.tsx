@@ -4,6 +4,17 @@ import { interpretChart, interpretNode, type Observation } from '../graph/interp
 import { relativeTime } from '../graph/snapshot'
 import type { SurveyDelta } from '../graph/snapshot'
 import { useI18n } from '../i18n/context'
+import {
+  complexityBand,
+  isExpedition,
+  isLighthouse,
+  isPort,
+  isRock,
+  HUB_MIN_OUTBOUND,
+  EXPEDITION_MIN_OUTBOUND,
+  LIGHTHOUSE_MIN_INBOUND,
+  type Complexity,
+} from '../graph/thresholds'
 
 interface Props {
   chart: CodeChart
@@ -46,28 +57,28 @@ function classifyNode(node: ChartNode): {
   body: string
   badge?: string
 } {
-  if (node.inbound === 0 && node.outbound === 0) {
+  if (isRock(node)) {
     return {
       label: 'rock',
       body: 'A rock. No route touches it: dead code, or called from outside the survey (tests, templates, reflection).',
       badge: 'rock',
     }
   }
-  if (node.inbound >= 5) {
+  if (isLighthouse(node)) {
     return {
       label: 'lighthouse',
       body: `A lighthouse. Called by ${node.inbound} other symbols. A change here ripples through the chart.`,
       badge: 'lighthouse',
     }
   }
-  if (node.inbound === 0 && node.outbound >= 3) {
+  if (isPort(node)) {
     return {
       label: 'port',
       body: 'A port of departure. Nothing in the survey calls it: an entry point, handler, or exported API.',
       badge: 'port',
     }
   }
-  if (node.outbound >= 8) {
+  if (isExpedition(node)) {
     return {
       label: 'expedition',
       body: `An expedition. ${node.outbound} routes set out from here; complexity gathers in symbols like this.`,
@@ -81,13 +92,6 @@ function classifyNode(node: ChartNode): {
     }
   }
   return { label: 'unremarkable', body: '' }
-}
-
-function complexityBand(outbound: number): { band: 'low' | 'mid' | 'high' | 'extreme'; label: string } {
-  if (outbound >= 15) return { band: 'extreme', label: 'extreme' }
-  if (outbound >= 8) return { band: 'high', label: 'high' }
-  if (outbound >= 4) return { band: 'mid', label: 'mid' }
-  return { band: 'low', label: 'low' }
 }
 
 interface ReachData {
@@ -228,33 +232,33 @@ interface Recommendation {
 
 function recommendationsFor(node: ChartNode, sameModule: number): Recommendation[] {
   const out: Recommendation[] = []
-  if (node.inbound === 0 && node.outbound === 0) {
+  if (isRock(node)) {
     out.push({
       severity: 'warn',
       title: 'No callers, no callees',
       body: 'Either dead code, or called from outside the survey (a test, a template, a string reference). Search the project for the symbol name to confirm.',
     })
   }
-  if (node.outbound >= 15) {
+  if (node.outbound >= HUB_MIN_OUTBOUND) {
     out.push({
       severity: 'danger',
       title: 'Hub function',
       body: 'This symbol calls many others directly. Consider whether some of those calls could be grouped or delegated so the call graph stays shallow.',
     })
-  } else if (node.outbound >= 8) {
+  } else if (node.outbound >= EXPEDITION_MIN_OUTBOUND) {
     out.push({
       severity: 'warn',
       title: 'Many direct calls',
       body: 'A wide call surface — easy to break on changes. Worth checking the cohesion of the called group.',
     })
   }
-  if (node.inbound >= 10) {
+  if (node.inbound >= HUB_MIN_OUTBOUND) {
     out.push({
       severity: 'warn',
       title: 'Heavy inbound traffic',
       body: 'Many symbols depend on this one. A change here has a large blast radius — keep its surface stable and its tests thorough.',
     })
-  } else if (node.inbound >= 5) {
+  } else if (node.inbound >= LIGHTHOUSE_MIN_INBOUND) {
     out.push({
       severity: 'info',
       title: 'Lighthouse',
@@ -268,7 +272,7 @@ function recommendationsFor(node: ChartNode, sameModule: number): Recommendation
       body: 'This symbol is the only one from its module visible to the rest of the chart. It is the module\u2019s public face.',
     })
   }
-  if (node.kind === 'class' && node.outbound === 0 && node.inbound === 0) {
+  if (node.kind === 'class' && isRock(node)) {
     out.push({
       severity: 'warn',
       title: 'Unused class',
@@ -383,7 +387,7 @@ export function SidePanel({ chart, selectedId, delta, onSelect }: Props) {
     )
   }
 
-  const complexity = complexityBand(node.outbound)
+  const complexity: Complexity = complexityBand(node.outbound)
   const visibleCallers = showAllCallers ? groupedCallers : groupedCallers.slice(0, 8)
   const visibleCallees = showAllCallees ? groupedCallees : groupedCallees.slice(0, 8)
   const reading = interpretNode(chart, node)
@@ -435,6 +439,33 @@ export function SidePanel({ chart, selectedId, delta, onSelect }: Props) {
 
         {reading && reading !== classification?.body && (
           <p className="node-reading secondary">{reading}</p>
+        )}
+
+        {reach && reach.layers.length > 0 && (
+          <div className="depth-chart" aria-label={t.node.reach}>
+            <div className="depth-chart-title">Reach by depth</div>
+            <div className="depth-bars">
+              {reach.layers.map((count, i) => {
+                const max = Math.max(...reach.layers, 1)
+                const heightPct = (count / max) * 100
+                return (
+                  <div
+                    key={i}
+                    className="depth-bar"
+                    style={{ height: `${Math.max(heightPct, 8)}%` }}
+                    title={`Depth ${i + 1}: ${count}`}
+                  >
+                    <span className="depth-bar-num">{count}</span>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="depth-axis">
+              {reach.layers.map((_, i) => (
+                <span key={i} className="depth-axis-tick">{i + 1}</span>
+              ))}
+            </div>
+          </div>
         )}
 
         <div className="meta-grid">

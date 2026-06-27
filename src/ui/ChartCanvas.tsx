@@ -8,6 +8,7 @@ interface Props {
   newIds: Set<number>
   onSelect: (id: number | null) => void
   onHover?: (id: number | null) => void
+  onOpenInEditor?: (id: number) => void
   highlightKind?: 'all' | 'function' | 'method' | 'class' | null
   hideRocks?: boolean
   newOnly?: boolean
@@ -83,6 +84,7 @@ export function ChartCanvas({
   newIds,
   onSelect,
   onHover,
+  onOpenInEditor,
   highlightKind = 'all',
   hideRocks = false,
   newOnly = false,
@@ -249,8 +251,11 @@ export function ChartCanvas({
       for (const id of searchMatch) searchRelated.add(id)
     }
     for (const n of map.values()) {
+      const hasSelection = selectedId != null
+      const hasHover = hoverId != null && hoverId !== n.id
       n.isFaded =
-        (selectedId != null && !incident.has(n.id)) ||
+        (hasSelection && !incident.has(n.id)) ||
+        (hasHover && !incident.has(n.id)) ||
         (searchMatch != null && searchMatch.size > 0 && !searchRelated.has(n.id))
     }
 
@@ -291,7 +296,7 @@ export function ChartCanvas({
     }
 
     return { nodeMap: map, edges: edgePaths }
-  }, [layout, chart.edges, selectedId, highlightKind, hideRocks, newOnly, searchMatch])
+  }, [layout, chart.edges, selectedId, hoverId, highlightKind, hideRocks, newOnly, searchMatch])
 
   const { moduleColors, bounds, pos: _pos } = layout
 
@@ -568,6 +573,53 @@ export function ChartCanvas({
 
   return (
     <div ref={containerRef} className={`chart-canvas-2d ${mounted ? 'mounted' : ''}`}>
+      <div className="compass-rose" aria-hidden="true">
+        <svg viewBox="0 0 100 100" width="100" height="100">
+          <defs>
+            <radialGradient id="compassGrad" cx="50%" cy="50%">
+              <stop offset="0%" stopColor="var(--gold-soft)" stopOpacity="0.4" />
+              <stop offset="80%" stopColor="var(--gold-soft)" stopOpacity="0" />
+            </radialGradient>
+          </defs>
+          <circle cx="50" cy="50" r="48" fill="url(#compassGrad)" />
+          <circle cx="50" cy="50" r="42" fill="none" stroke="var(--ink-hairline)" strokeWidth="0.5" />
+          <circle cx="50" cy="50" r="34" fill="none" stroke="var(--ink-hairline)" strokeWidth="0.3" strokeDasharray="1 3" />
+          <g className="compass-rose-ticks">
+            {Array.from({ length: 32 }, (_, i) => {
+              const a = (i * 360) / 32
+              const r1 = i % 4 === 0 ? 28 : 32
+              const r2 = 38
+              const rad = (a * Math.PI) / 180
+              return (
+                <line
+                  key={i}
+                  x1={50 + Math.cos(rad) * r1}
+                  y1={50 + Math.sin(rad) * r1}
+                  x2={50 + Math.cos(rad) * r2}
+                  y2={50 + Math.sin(rad) * r2}
+                  stroke="var(--ink-dim)"
+                  strokeWidth={i % 8 === 0 ? 0.7 : 0.3}
+                  opacity={i % 8 === 0 ? 0.7 : 0.3}
+                />
+              )
+            })}
+          </g>
+          <g className="compass-rose-star">
+            <polygon
+              points="50,16 53,47 80,50 53,53 50,84 47,53 20,50 47,47"
+              fill="var(--gold)"
+              opacity="0.55"
+            />
+            <line x1="50" y1="16" x2="50" y2="84" stroke="var(--gold-bright)" strokeWidth="0.5" />
+            <line x1="20" y1="50" x2="80" y2="50" stroke="var(--gold-bright)" strokeWidth="0.5" />
+            <text x="50" y="12" fontSize="6" fontFamily="serif" fill="var(--gold-bright)" textAnchor="middle" fontStyle="italic">N</text>
+            <text x="50" y="93" fontSize="6" fontFamily="serif" fill="var(--gold-soft)" textAnchor="middle" fontStyle="italic">S</text>
+            <text x="8" y="52" fontSize="6" fontFamily="serif" fill="var(--gold-soft)" fontStyle="italic">W</text>
+            <text x="92" y="52" fontSize="6" fontFamily="serif" fill="var(--gold-soft)" fontStyle="italic">E</text>
+            <circle cx="50" cy="50" r="2" fill="var(--gold-bright)" />
+          </g>
+        </svg>
+      </div>
       <svg ref={svgRef} className="chart-svg" preserveAspectRatio="xMidYMid meet">
         <defs>
           <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
@@ -586,6 +638,11 @@ export function ChartCanvas({
           <filter id="nodeHalo" x="-200%" y="-200%" width="500%" height="500%">
             <feGaussianBlur in="SourceGraphic" stdDeviation="2" />
           </filter>
+          <radialGradient id="moduleGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="currentColor" stopOpacity="0.18" />
+            <stop offset="65%" stopColor="currentColor" stopOpacity="0.06" />
+            <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+          </radialGradient>
         </defs>
 
         <rect x="-8000" y="-8000" width="16000" height="16000" fill="url(#bgGlow)" />
@@ -593,6 +650,11 @@ export function ChartCanvas({
         <g className="module-halos" opacity="0.18" pointerEvents="none">
           {(() => {
             const groups = new Map<string, { x: number; y: number; nodes: NodePos[] }>()
+            const activeModule = hoverId != null
+              ? nodeList.find((n) => n.id === hoverId)?.module
+              : selectedId != null
+                ? nodeList.find((n) => n.id === selectedId)?.module
+                : null
             for (const n of nodeList) {
               if (n.isFaded && !n.isLighthouse && !n.isPort) continue
               const g = groups.get(n.module) ?? { x: 0, y: 0, nodes: [] }
@@ -604,20 +666,54 @@ export function ChartCanvas({
             return Array.from(groups.entries()).map(([m, g]) => {
               const cx = g.x / g.nodes.length
               const cy = g.y / g.nodes.length
-              const radius = Math.max(...g.nodes.map((n) => Math.hypot(n.x - cx, n.y - cy))) + 40
+              const radius = Math.max(...g.nodes.map((n) => Math.hypot(n.x - cx, n.y - cy))) + 60
               const color = moduleColors.get(m) ?? PALETTE.gold
+              const isActive = m === activeModule
               return (
-                <circle
-                  key={m}
-                  cx={cx}
-                  cy={cy}
-                  r={radius}
-                  fill={color}
-                  opacity="0.08"
-                  stroke={color}
-                  strokeWidth="0.4"
-                  strokeOpacity="0.25"
-                />
+                <g key={m} style={{ color }} className={isActive ? 'module-active' : ''}>
+                  <circle
+                    cx={cx}
+                    cy={cy}
+                    r={radius}
+                    fill="url(#moduleGlow)"
+                    stroke={color}
+                    strokeWidth={isActive ? 0.8 : 0.4}
+                    strokeOpacity={isActive ? 0.55 : 0.22}
+                  />
+                  <circle
+                    cx={cx}
+                    cy={cy}
+                    r={radius * 1.18}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth="0.2"
+                    strokeOpacity={isActive ? 0.3 : 0.1}
+                    strokeDasharray="2 4"
+                  >
+                    <animateTransform
+                      attributeName="transform"
+                      type="rotate"
+                      from={`0 ${cx} ${cy}`}
+                      to={`360 ${cx} ${cy}`}
+                      dur="120s"
+                      repeatCount="indefinite"
+                    />
+                  </circle>
+                  {isActive && (
+                    <text
+                      x={cx}
+                      y={cy - radius - 14}
+                      textAnchor="middle"
+                      fontSize="9"
+                      letterSpacing="0.18em"
+                      fontFamily="IBM Plex Mono, monospace"
+                      fill={color}
+                      opacity="0.7"
+                    >
+                      {m.toUpperCase()}
+                    </text>
+                  )}
+                </g>
               )
             })
           })()}
@@ -680,6 +776,10 @@ export function ChartCanvas({
                 onMouseEnter={(e) => handleNodeEnter(n, e)}
                 onMouseMove={(e) => handleNodeMove(n, e)}
                 onMouseLeave={handleNodeLeave}
+                onDoubleClick={(e) => {
+                  e.stopPropagation()
+                  if (onOpenInEditor) onOpenInEditor(n.id)
+                }}
                 className={`node ${isSel ? 'selected' : ''} ${isHover ? 'hovered' : ''} ${n.isLighthouse ? 'lighthouse' : ''} ${n.isPort ? 'port' : ''} ${n.isRock ? 'rock' : ''} ${n.isExpedition ? 'expedition' : ''} ${n.isNew ? 'new' : ''} ${n.isSearchHit ? 'search-hit' : ''}`}
               >
                 {(isSel || n.isLighthouse || n.isNew) && (
