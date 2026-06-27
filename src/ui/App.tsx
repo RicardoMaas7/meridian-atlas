@@ -16,6 +16,7 @@ import { SearchOverlay } from './SearchOverlay'
 import { HelpOverlay } from './HelpOverlay'
 import { ReadyHint } from './ReadyHint'
 import { RecentsList } from './RecentsList'
+import { ToastContainer } from './ToastContainer'
 import { useI18n } from '../i18n/context'
 import {
   tauriAvailable,
@@ -31,6 +32,7 @@ import { useSurvey, useSessionRestore } from './hooks/useSurvey'
 import { useWatcher } from './hooks/useWatcher'
 import { useHotkeys } from './hooks/useHotkeys'
 import { useNativeMenu } from './hooks/useNativeMenu'
+import { pushToast } from './hooks/useToasts'
 import { downloadText, downloadBlob, serializeSVG, svgToPng } from './chartExport'
 import type { FilterKind } from './filters'
 
@@ -204,7 +206,7 @@ export function App() {
     onViewSpecimen: openSpecimen,
     onNewChart: newChart,
     onResurvey: resurvey,
-    onAbout: () => alert(`${t.labels.title}\nA navigational chart of your code.\nNative desktop app.`),
+    onAbout: () => pushToast({ kind: 'info', message: t.labels.title, detail: 'A navigational chart of your code.' }),
     onExportChart: () => {
       const c = phaseRef.current
       if (c.name !== 'charted') return
@@ -215,7 +217,11 @@ export function App() {
         const data = await importSnapshot()
         if (!data) return
         const payload = data as { nodes?: unknown[] }
-        alert('Imported snapshot contains ' + (payload.nodes?.length ?? 0) + ' symbols. Snapshot import is read-only in this build.')
+        pushToast({
+          kind: 'info',
+          message: t.labels.snapshotImported,
+          detail: `${payload.nodes?.length ?? 0} symbols — ${t.labels.snapshotImportedBody}`,
+        })
       })()
     },
   }), [openFolder, openSpecimen, newChart, resurvey, t.labels.title]))
@@ -318,8 +324,15 @@ export function App() {
     if (selectedId == null || !currentChart) return
     const node = currentChart.nodes.find((n) => n.id === selectedId)
     if (!node) return
-    await openInEditor(node.file)
-  }, [selectedId, currentChart])
+    const ok = await openInEditor(node.file)
+    if (ok) {
+      pushToast({ kind: 'success', message: t.labels.openInEditor, detail: node.file, ttlMs: 2200 })
+    } else if (!isNative) {
+      pushToast({ kind: 'info', message: t.labels.openInEditor, detail: 'Path copied to clipboard.', ttlMs: 2400 })
+    } else {
+      pushToast({ kind: 'error', message: t.labels.openInEditor, detail: node.file, ttlMs: 3500 })
+    }
+  }, [selectedId, currentChart, isNative, t.labels.openInEditor])
 
   return (
     <div className="sheet" data-theme={theme} lang={lang}>
@@ -386,6 +399,7 @@ export function App() {
                 } else {
                   downloadText(json, filename, 'application/json')
                 }
+                pushToast({ kind: 'success', message: t.labels.exportJSON, detail: filename })
               }}
               onExportSVG={() => {
                 const svg = document.querySelector('.chart-svg') as SVGSVGElement | null
@@ -395,6 +409,7 @@ export function App() {
                 if (c.name !== 'charted') return
                 const filename = `meridian-${c.title.replace(/[^a-z0-9_-]+/gi, '_')}-${new Date().toISOString().slice(0, 10)}.svg`
                 downloadText(xml, filename, 'image/svg+xml')
+                pushToast({ kind: 'success', message: t.labels.exportSVG, detail: filename })
               }}
               onExportPNG={async () => {
                 const svg = document.querySelector('.chart-svg') as SVGSVGElement | null
@@ -404,12 +419,17 @@ export function App() {
                 if (c.name !== 'charted') return
                 const filename = `meridian-${c.title.replace(/[^a-z0-9_-]+/gi, '_')}-${new Date().toISOString().slice(0, 10)}.png`
                 downloadBlob(blob, filename)
+                pushToast({ kind: 'success', message: t.labels.exportPNG, detail: filename })
               }}
               onImportJSON={async () => {
                 const data = await importSnapshot()
                 if (!data) return
                 const payload = data as { nodes?: unknown[] }
-                alert('Imported ' + (payload.nodes?.length ?? 0) + ' symbols. Use the desktop app menu File → Import for full restoration.')
+                pushToast({
+                  kind: 'info',
+                  message: t.labels.snapshotImported,
+                  detail: `${payload.nodes?.length ?? 0} symbols — ${t.labels.snapshotImportedBody}`,
+                })
               }}
             />
             <ChartHeader
@@ -469,6 +489,8 @@ export function App() {
         />
       )}
 
+      <ToastContainer />
+
       {showRecents && (
         <RecentsList
           recents={recents}
@@ -486,8 +508,11 @@ export function App() {
                 console.error(err)
               }
             } else {
-              // Web: cannot re-open a recent without a fresh picker; offer guidance.
-              alert('Recents for the web build are for reference only. Pick the folder again with the chart-folder button to re-survey.')
+              pushToast({
+                kind: 'info',
+                message: t.labels.recentsTitle,
+                detail: t.labels.recentsNativeOnly,
+              })
             }
           }}
           onRemove={removeRecent}

@@ -202,10 +202,56 @@ body {
   gap: 14px;
 }
 
+/* Constellation of star points that drifts slowly behind the landing
+   mark; combined with .grain it gives a deep-sky feel. */
+.landing::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1.5px 1.5px at 14% 22%, var(--ink-faint), transparent),
+    radial-gradient(1px 1px at 82% 28%, var(--ink-faint), transparent),
+    radial-gradient(1.2px 1.2px at 38% 64%, var(--ink-faint), transparent),
+    radial-gradient(1px 1px at 64% 78%, var(--ink-faint), transparent),
+    radial-gradient(2px 2px at 22% 88%, var(--gold-soft), transparent),
+    radial-gradient(1.2px 1.2px at 76% 18%, var(--gold-soft), transparent),
+    radial-gradient(1px 1px at 48% 8%, var(--ink-faint), transparent),
+    radial-gradient(1.4px 1.4px at 88% 72%, var(--ink-faint), transparent);
+  background-size: 100% 100%;
+  animation: twinkle 12s ease-in-out infinite;
+  opacity: 0.7;
+}
+
 .landing-mark {
   margin-bottom: 18px;
   filter: drop-shadow(0 0 18px var(--gold-glow));
   animation: pulse 4s ease-in-out infinite;
+  position: relative;
+}
+/* A faint rotating aura around the landing mark, evoking a compass */
+.landing-mark::after {
+  content: "";
+  position: absolute;
+  inset: -36px;
+  border: 1px solid var(--gold-soft);
+  border-radius: 50%;
+  opacity: 0.35;
+  animation: spin 24s linear infinite;
+  pointer-events: none;
+}
+.landing-mark::before {
+  content: "";
+  position: absolute;
+  inset: -56px;
+  border: 1px dashed var(--gold-soft);
+  border-radius: 50%;
+  opacity: 0.18;
+  animation: spin 60s linear infinite reverse;
+  pointer-events: none;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 @keyframes pulse {
@@ -221,6 +267,21 @@ body {
   color: var(--gold);
   margin: 0;
   opacity: 0.85;
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+  border-right: 1px solid var(--gold);
+  animation: typewriter 1.4s steps(20, end) 0.5s 1 both, cursor 0.8s steps(2, end) 1.9s 3 forwards;
+  max-width: 100%;
+}
+@keyframes typewriter {
+  from { max-width: 0; }
+  to { max-width: 100%; }
+}
+@keyframes cursor {
+  0%, 100% { border-color: var(--gold); }
+  50% { border-color: transparent; }
 }
 
 .display {
@@ -236,6 +297,24 @@ body {
   -webkit-text-fill-color: transparent;
   color: transparent;
   filter: drop-shadow(0 0 30px var(--gold-glow));
+  position: relative;
+}
+.display::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(242, 207, 128, 0.4) 50%, transparent 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: shimmer 5s ease-in-out infinite;
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+@keyframes shimmer {
+  0%, 100% { transform: translateX(-110%); }
+  50%      { transform: translateX(110%); }
 }
 
 .subtitle {
@@ -2431,4 +2510,62 @@ body {
 .chip.active {
   position: relative;
   box-shadow: 0 1px 0 0 var(--gold) inset, 0 -1px 0 0 var(--gold-bright) inset;
+}
+
+/* ---------- Toast stack ---------- */
+
+.toast-stack {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 300;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 10px;
+  pointer-events: none;
+  max-width: 360px;
+}
+
+.toast {
+  pointer-events: auto;
+  background: rgba(10, 12, 20, 0.96);
+  border: 1px solid var(--gold-soft);
+  border-left: 3px solid var(--gold);
+  padding: 12px 16px;
+  font-family: var(--mono);
+  color: var(--ink);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  animation: toastIn 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  min-width: 260px;
+}
+.toast:hover { border-color: var(--gold); }
+.toast-message {
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold-bright);
+  font-weight: 500;
+}
+.toast-detail {
+  margin-top: 4px;
+  font-family: var(--serif);
+  font-size: 12.5px;
+  color: var(--ink-mid);
+  line-height: 1.45;
+  letter-spacing: 0;
+  text-transform: none;
+  word-break: break-all;
+}
+.toast-success { border-left-color: #a8c87a; }
+.toast-success .toast-message { color: #a8c87a; }
+.toast-warn { border-left-color: var(--rose); }
+.toast-warn .toast-message { color: var(--rose); }
+.toast-error { border-left-color: var(--rose); background: rgba(255, 125, 107, 0.08); }
+.toast-error .toast-message { color: var(--rose); }
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(20px) translateY(4px); }
+  to   { opacity: 1; transform: translateX(0)    translateY(0); }
 }
