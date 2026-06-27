@@ -111,6 +111,14 @@ export interface Translations {
     back: string
     skip: string
     done: string
+    sections: {
+      navigation: string
+      selection: string
+      searchFilter: string
+      help: string
+    }
+    panArrows: string
+    zoomKeys: string
     steps: {
       welcome: { title: string; body: string }
       nodes: { title: string; body: string }
@@ -146,6 +154,10 @@ export interface Translations {
     hideRocks: string
     showRocks: string
     newOnly: string
+  }
+  minimap: {
+    title: string
+    hide: string
   }
   node: {
     module: string
@@ -291,6 +303,14 @@ const en: Translations = {
     back: 'Back',
     skip: 'Skip',
     done: 'Done',
+    sections: {
+      navigation: 'Navigation',
+      selection: 'Selection',
+      searchFilter: 'Search & filter',
+      help: 'Help',
+    },
+    panArrows: 'Pan the chart',
+    zoomKeys: 'Zoom in / out',
     steps: {
       welcome: {
         title: 'A chart of your code',
@@ -368,6 +388,10 @@ const en: Translations = {
     hideRocks: 'Hide rocks',
     showRocks: 'Show rocks',
     newOnly: 'New only',
+  },
+  minimap: {
+    title: 'Chart',
+    hide: 'Hide minimap',
   },
   node: {
     module: 'Module',
@@ -512,7 +536,15 @@ const es: Translations = {
     next: 'Siguiente',
     back: 'Atrás',
     skip: 'Saltar',
-    done: 'Hecho',
+    done: 'Listo',
+    sections: {
+      navigation: 'Navegación',
+      selection: 'Selección',
+      searchFilter: 'Buscar y filtrar',
+      help: 'Ayuda',
+    },
+    panArrows: 'Mover la carta',
+    zoomKeys: 'Acercar / alejar',
     steps: {
       welcome: {
         title: 'Una carta de tu código',
@@ -590,6 +622,10 @@ const es: Translations = {
     hideRocks: 'Ocultar rocas',
     showRocks: 'Mostrar rocas',
     newOnly: 'Solo nuevos',
+  },
+  minimap: {
+    title: 'Carta',
+    hide: 'Ocultar minimapa',
   },
   node: {
     module: 'Módulo',

@@ -12,6 +12,7 @@ import { Landing } from './Landing'
 import { ChartToolbar } from './ChartToolbar'
 import { ChartHeader } from './ChartHeader'
 import { ChartLegend } from './ChartLegend'
+import { ExportToolbar } from './ExportToolbar'
 import { SearchOverlay } from './SearchOverlay'
 import { HelpOverlay } from './HelpOverlay'
 import { ReadyHint } from './ReadyHint'
@@ -367,27 +368,7 @@ export function App() {
         <div className="chart-view">
           <div className="chart-main">
             <LanguageSelector onToggleTheme={toggleTheme} theme={theme} />
-            <ChartCanvas
-              chart={currentChart}
-              selectedId={selectedId}
-              newIds={newIds}
-              onSelect={setSelectedId}
-              onOpenInEditor={onOpenInEditor}
-              highlightKind={filterKind === 'all' ? null : filterKind}
-              hideRocks={hideRocks}
-              newOnly={newOnly}
-              searchMatch={searchMatch}
-              focusId={tourStep !== null ? tourHighlight : null}
-              focusZoom={tourStep === 1 ? 260 : tourStep === 2 ? 280 : tourStep === 3 ? 200 : undefined}
-            />
-            <ChartToolbar
-              filterKind={filterKind}
-              setFilterKind={setFilterKind}
-              hideRocks={hideRocks}
-              setHideRocks={setHideRocks}
-              newOnly={newOnly}
-              setNewOnly={setNewOnly}
-              onRestartTour={restartTour}
+            <ExportToolbar
               onExportJSON={async () => {
                 const c = phaseRef.current
                 if (c.name !== 'charted') return
@@ -431,6 +412,28 @@ export function App() {
                   detail: `${payload.nodes?.length ?? 0} symbols — ${t.labels.snapshotImportedBody}`,
                 })
               }}
+              onRestartTour={restartTour}
+            />
+            <ChartCanvas
+              chart={currentChart}
+              selectedId={selectedId}
+              newIds={newIds}
+              onSelect={setSelectedId}
+              onOpenInEditor={onOpenInEditor}
+              highlightKind={filterKind === 'all' ? null : filterKind}
+              hideRocks={hideRocks}
+              newOnly={newOnly}
+              searchMatch={searchMatch}
+              focusId={tourStep !== null ? tourHighlight : null}
+              focusZoom={tourStep === 1 ? 260 : tourStep === 2 ? 280 : tourStep === 3 ? 200 : undefined}
+            />
+            <ChartToolbar
+              filterKind={filterKind}
+              setFilterKind={setFilterKind}
+              hideRocks={hideRocks}
+              setHideRocks={setHideRocks}
+              newOnly={newOnly}
+              setNewOnly={setNewOnly}
             />
             <ChartHeader
               title={phase.title}

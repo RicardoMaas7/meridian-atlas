@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CodeChart } from '../types'
 import { startLayout } from '../graph/layout'
+import { useI18n } from '../i18n/context'
 
 interface Props {
   chart: CodeChart
@@ -94,6 +95,7 @@ export function ChartCanvas({
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const { t } = useI18n()
   const viewRef = useRef<ViewBox>({ minX: -500, minY: -500, size: 1000 })
   const dragRef = useRef<{ x: number; y: number; vx: number; vy: number; button: number } | null>(null)
   const dragMovedRef = useRef(false)
@@ -574,49 +576,70 @@ export function ChartCanvas({
   return (
     <div ref={containerRef} className={`chart-canvas-2d ${mounted ? 'mounted' : ''}`}>
       <div className="compass-rose" aria-hidden="true">
-        <svg viewBox="0 0 100 100" width="100" height="100">
+        <svg viewBox="-50 -50 100 100" width="120" height="120">
           <defs>
-            <radialGradient id="compassGrad" cx="50%" cy="50%">
-              <stop offset="0%" stopColor="var(--gold-soft)" stopOpacity="0.4" />
-              <stop offset="80%" stopColor="var(--gold-soft)" stopOpacity="0" />
+            <radialGradient id="compass-face" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="var(--void-soft)" stopOpacity="0.6" />
+              <stop offset="80%" stopColor="var(--void)" stopOpacity="0" />
             </radialGradient>
+            <linearGradient id="compass-needle-n" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="var(--gold-bright)" />
+              <stop offset="100%" stopColor="var(--gold)" />
+            </linearGradient>
+            <linearGradient id="compass-needle-s" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="var(--ink-dim)" stopOpacity="0.4" />
+              <stop offset="100%" stopColor="var(--ink-dim)" stopOpacity="0.8" />
+            </linearGradient>
           </defs>
-          <circle cx="50" cy="50" r="48" fill="url(#compassGrad)" />
-          <circle cx="50" cy="50" r="42" fill="none" stroke="var(--ink-hairline)" strokeWidth="0.5" />
-          <circle cx="50" cy="50" r="34" fill="none" stroke="var(--ink-hairline)" strokeWidth="0.3" strokeDasharray="1 3" />
+
+          {/* Outer face — soft halo */}
+          <circle r="48" fill="url(#compass-face)" />
+
+          {/* Outer ring (the bezel) */}
+          <circle r="44" fill="none" stroke="var(--gold-soft)" strokeWidth="0.6" opacity="0.7" />
+          <circle r="40" fill="none" stroke="var(--gold-soft)" strokeWidth="0.3" opacity="0.4" />
+
+          {/* Tick marks: major at 8 cardinal/intercardinal, minor every 11.25° */}
           <g className="compass-rose-ticks">
             {Array.from({ length: 32 }, (_, i) => {
               const a = (i * 360) / 32
-              const r1 = i % 4 === 0 ? 28 : 32
+              const rad = (a - 90) * (Math.PI / 180)
+              const isMajor = i % 4 === 0
+              const r1 = isMajor ? 30 : 33
               const r2 = 38
-              const rad = (a * Math.PI) / 180
               return (
                 <line
                   key={i}
-                  x1={50 + Math.cos(rad) * r1}
-                  y1={50 + Math.sin(rad) * r1}
-                  x2={50 + Math.cos(rad) * r2}
-                  y2={50 + Math.sin(rad) * r2}
-                  stroke="var(--ink-dim)"
-                  strokeWidth={i % 8 === 0 ? 0.7 : 0.3}
-                  opacity={i % 8 === 0 ? 0.7 : 0.3}
+                  x1={Math.cos(rad) * r1}
+                  y1={Math.sin(rad) * r1}
+                  x2={Math.cos(rad) * r2}
+                  y2={Math.sin(rad) * r2}
+                  stroke={isMajor ? 'var(--gold)' : 'var(--ink-dim)'}
+                  strokeWidth={isMajor ? 0.9 : 0.3}
+                  opacity={isMajor ? 0.85 : 0.4}
                 />
               )
             })}
           </g>
+
+          {/* Cardinal letters */}
+          <g className="compass-rose-letters" fontFamily="'Spectral', serif" fontStyle="italic" textAnchor="middle">
+            <text x="0" y="-32" fontSize="7" fill="var(--gold-bright)" fontWeight="500">N</text>
+            <text x="0" y="36" fontSize="6" fill="var(--ink-dim)">S</text>
+            <text x="-35" y="2" fontSize="6" fill="var(--ink-dim)">W</text>
+            <text x="35" y="2" fontSize="6" fill="var(--ink-dim)">E</text>
+          </g>
+
+          {/* Inner ring (compass card edge) */}
+          <circle r="22" fill="none" stroke="var(--gold-soft)" strokeWidth="0.4" opacity="0.6" />
+
+          {/* Compass needle — north half gold, south half dim */}
           <g className="compass-rose-star">
-            <polygon
-              points="50,16 53,47 80,50 53,53 50,84 47,53 20,50 47,47"
-              fill="var(--gold)"
-              opacity="0.55"
-            />
-            <line x1="50" y1="16" x2="50" y2="84" stroke="var(--gold-bright)" strokeWidth="0.5" />
-            <line x1="20" y1="50" x2="80" y2="50" stroke="var(--gold-bright)" strokeWidth="0.5" />
-            <text x="50" y="12" fontSize="6" fontFamily="serif" fill="var(--gold-bright)" textAnchor="middle" fontStyle="italic">N</text>
-            <text x="50" y="93" fontSize="6" fontFamily="serif" fill="var(--gold-soft)" textAnchor="middle" fontStyle="italic">S</text>
-            <text x="8" y="52" fontSize="6" fontFamily="serif" fill="var(--gold-soft)" fontStyle="italic">W</text>
-            <text x="92" y="52" fontSize="6" fontFamily="serif" fill="var(--gold-soft)" fontStyle="italic">E</text>
-            <circle cx="50" cy="50" r="2" fill="var(--gold-bright)" />
+            <polygon points="0,-22 4,0 0,22 -4,0" fill="url(#compass-needle-n)" opacity="0.95" />
+            <polygon points="0,22 4,0 0,-22 -4,0" fill="url(#compass-needle-s)" opacity="0.7" />
+            {/* Pivot */}
+            <circle r="2.2" fill="var(--void)" stroke="var(--gold)" strokeWidth="0.6" />
+            <circle r="0.8" fill="var(--gold-bright)" />
           </g>
         </svg>
       </div>
@@ -873,6 +896,8 @@ export function ChartCanvas({
             setMiniMapTick((t) => (t + 1) & 0xffff)
           }}
           onClose={() => setShowMiniMap(false)}
+          title={t.minimap?.title ?? 'Chart'}
+          hideLabel={t.minimap?.hide ?? 'Hide minimap'}
         />
       )}
     </div>
@@ -900,9 +925,11 @@ interface MiniMapProps {
   nodes: NodePos[]
   onJump: (worldX: number, worldY: number) => void
   onClose: () => void
+  title: string
+  hideLabel: string
 }
 
-function MiniMap({ size, scale, bounds, vx, vy, vs, vsh, nodes, onJump, onClose }: MiniMapProps) {
+function MiniMap({ size, scale, bounds, vx, vy, vs, vsh, nodes, onJump, onClose, title, hideLabel }: MiniMapProps) {
   const [hover, setHover] = useState<{ vx: number; vy: number } | null>(null)
   const [dragging, setDragging] = useState(false)
 
@@ -929,12 +956,12 @@ function MiniMap({ size, scale, bounds, vx, vy, vs, vsh, nodes, onJump, onClose 
       onPointerUp={(e) => e.stopPropagation()}
     >
       <div className="mini-map-header">
-        <span className="mini-map-title">Chart</span>
+        <span className="mini-map-title">{title}</span>
         <button
           className="mini-map-close"
           onClick={(e) => { e.stopPropagation(); onClose() }}
-          title="Hide minimap"
-          aria-label="Hide minimap"
+          title={hideLabel}
+          aria-label={hideLabel}
         >
           ×
         </button>

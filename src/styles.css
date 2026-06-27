@@ -803,12 +803,15 @@ body {
 /* Mini-map */
 .mini-map {
   position: absolute;
-  bottom: 16px;
-  right: 16px;
-  background: color-mix(in srgb, var(--void-soft) 92%, transparent);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--ink-hairline);
-  z-index: 2;
+  top: 140px;
+  right: 32px;
+  background: color-mix(in srgb, var(--void) 92%, transparent);
+  border: 1px solid var(--gold-soft);
+  z-index: 5;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6), 0 0 16px rgba(212, 168, 87, 0.1);
+  transition: border-color 0.2s ease, transform 0.2s ease;
+  user-select: none;
 }
 
 .mini-map:hover {
@@ -865,7 +868,6 @@ body {
   left: 24px;
   right: 24px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
   z-index: 6;
   pointer-events: none;
@@ -876,12 +878,37 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(10, 12, 20, 0.75);
+  background: color-mix(in srgb, var(--void-soft) 75%, transparent);
   border: 1px solid var(--ink-hairline);
   padding: 4px 8px;
   backdrop-filter: blur(8px);
   pointer-events: auto;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+.toolbar-filters { flex: 1 1 auto; min-width: 0; flex-wrap: wrap; }
+.toolbar-exports { flex: 0 0 auto; margin-left: auto; }
+
+/* Export toolbar — sits below the language selector on the chart */
+.export-toolbar {
+  position: absolute;
+  top: 78px;
+  right: 24px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: color-mix(in srgb, var(--void-soft) 75%, transparent);
+  border: 1px solid var(--ink-hairline);
+  padding: 4px 8px;
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+.export-toolbar .chip { padding: 4px 8px; }
+.export-toolbar-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--ink-hairline);
+  margin: 0 4px;
 }
 
 .toolbar-label {
@@ -905,7 +932,12 @@ body {
   cursor: pointer;
   transition: color 0.2s, background-color 0.2s, border-color 0.2s, opacity 0.2s, transform 0.2s;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
+.chip svg { flex-shrink: 0; opacity: 0.7; }
+.chip:hover svg { opacity: 1; }
 
 .chip:hover {
   color: var(--gold);
@@ -918,10 +950,11 @@ body {
   border-color: var(--gold);
 }
 
-.chip.icon {
+.chip-help {
   font-size: 14px;
   font-weight: 600;
   padding: 2px 8px;
+  letter-spacing: 0;
 }
 
 .titleblock-kicker {
@@ -2425,30 +2458,34 @@ body {
   to { opacity: 1; }
 }
 
-/* Compass rose — purely decorative, sits behind everything */
+/* Compass rose — purely decorative, sits in the lower-left corner
+   like a real nautical chart. */
 .compass-rose {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 220px;
-  height: 220px;
-  z-index: 0;
+  left: 32px;
+  bottom: 32px;
+  width: 120px;
+  height: 120px;
+  z-index: 2;
   pointer-events: none;
-  opacity: 0.35;
-  filter: blur(0.4px);
+  opacity: 0.85;
 }
 .compass-rose svg { animation: compassFloat 14s ease-in-out infinite; }
 .compass-rose .compass-rose-ticks { animation: compassRotate 240s linear infinite; transform-origin: 50% 50%; }
-.compass-rose .compass-rose-star { animation: compassRotate 360s linear infinite reverse; transform-origin: 50% 50%; }
+.compass-rose .compass-rose-star { animation: compassFloat 6s ease-in-out infinite; transform-origin: 50% 50%; }
 @keyframes compassFloat {
-  0%, 100% { opacity: 0.32; }
-  50%      { opacity: 0.5; }
+  0%, 100% { opacity: 0.85; transform: rotate(-1deg); }
+  50%      { opacity: 0.95; transform: rotate(1deg); }
 }
 @keyframes compassRotate {
   to { transform: rotate(360deg); }
 }
-[data-theme="light"] .compass-rose { opacity: 0.18; }
+[data-theme="light"] .compass-rose { opacity: 0.7; }
+
+/* On small charts, hide the compass to avoid overlapping the title */
+@media (max-width: 1100px) {
+  .compass-rose { display: none; }
+}
 
 /* The "stat-num grade" letter gets a soft reveal animation when the
    chart re-mounts. */

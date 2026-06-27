@@ -679,8 +679,8 @@ function HelpView({ t }: { t: ReturnType<typeof useI18n>['t'] }) {
         <div className="help-row"><kbd>scroll</kbd><span>{t.help.zoom}</span></div>
         <div className="help-row"><kbd>click</kbd><span>{t.help.select}</span></div>
         <div className="help-row"><kbd>0</kbd><span>{t.help.reset}</span></div>
-        <div className="help-row"><kbd>←↑→↓</kbd><span>Pan the chart</span></div>
-        <div className="help-row"><kbd>+ −</kbd><span>Zoom in / out</span></div>
+        <div className="help-row"><kbd>←↑→↓</kbd><span>{t.help.panArrows}</span></div>
+        <div className="help-row"><kbd>+ −</kbd><span>{t.help.zoomKeys}</span></div>
       </div>
     </div>
   )

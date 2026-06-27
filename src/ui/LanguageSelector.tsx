@@ -14,7 +14,7 @@ export function LanguageSelector({ theme, onToggleTheme }: Props) {
     <div className="top-controls">
       <span className="platform-pill" data-native={isNative ? 'true' : 'false'}>
         <span className="platform-dot" />
-        {isNative ? 'desktop' : 'web'}
+        {isNative ? t.labels.nativeApp : t.labels.webApp}
       </span>
       <button
         className="theme-toggle"
@@ -43,20 +43,22 @@ export function LanguageSelector({ theme, onToggleTheme }: Props) {
           </svg>
         )}
       </button>
-      <div className="lang-selector" role="group" aria-label="Language">
+      <div className="lang-selector" role="group" aria-label={lang === 'es' ? 'Idioma' : 'Language'}>
         <button
           className={`lang-btn ${lang === 'en' ? 'active' : ''}`}
           onClick={() => setLang('en')}
-          title="English"
+          title={lang === 'es' ? 'Inglés' : 'English'}
           aria-pressed={lang === 'en'}
+          aria-label={lang === 'es' ? 'Cambiar a inglés' : 'Switch to English'}
         >
           EN
         </button>
         <button
           className={`lang-btn ${lang === 'es' ? 'active' : ''}`}
           onClick={() => setLang('es')}
-          title="Español"
+          title={lang === 'es' ? 'Español' : 'Spanish'}
           aria-pressed={lang === 'es'}
+          aria-label={lang === 'es' ? 'Cambiar a español' : 'Switch to Spanish'}
         >
           ES
         </button>
