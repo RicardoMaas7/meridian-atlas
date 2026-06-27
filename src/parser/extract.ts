@@ -47,58 +47,85 @@ export async function extractFile(
   nextId: () => number,
 ): Promise<ExtractResult> {
   const spec = LANGUAGES[file.lang]
-  const parser = await createParser(file.lang)
-  const tree = parser.parse(file.text)
+  let parser
+  try {
+    parser = await createParser(file.lang)
+  } catch (err) {
+    if (typeof console !== 'undefined') console.warn(`[meridian] parser init failed for ${file.path}:`, err)
+    return { decls: [], calls: [] }
+  }
+  let tree
+  try {
+    tree = parser.parse(file.text)
+  } catch (err) {
+    parser.delete()
+    if (typeof console !== 'undefined') console.warn(`[meridian] parse failed for ${file.path}:`, err)
+    return { decls: [], calls: [] }
+  }
   parser.delete()
   if (!tree) return { decls: [], calls: [] }
 
-  const { decl: declQuery, call: callQuery } = await queriesFor(file.lang)
+  let queries
+  try {
+    queries = await queriesFor(file.lang)
+  } catch (err) {
+    tree.delete()
+    if (typeof console !== 'undefined') console.warn(`[meridian] query init failed for ${file.path}:`, err)
+    return { decls: [], calls: [] }
+  }
+  const { decl: declQuery, call: callQuery } = queries
 
   const decls: Decl[] = []
   const declNodes: { decl: Decl; start: number; end: number }[] = []
 
-  for (const capture of declQuery.captures(tree.rootNode)) {
-    let kind = capture.name.replace('def.', '') as Decl['kind']
-    const nameNode = capture.node
-    // The span that "owns" inner calls is the whole declaration, not just the name.
-    const body = enclosingDeclaration(nameNode, spec.declNodeTypes)
-    // In Python/Rust/C++ a function nested in a class/impl is really a method.
-    if (kind === 'function' && spec.classAncestors.length > 0) {
-      if (hasAncestor(nameNode, spec.classAncestors)) kind = 'method'
+  try {
+    for (const capture of declQuery.captures(tree.rootNode)) {
+      let kind = capture.name.replace('def.', '') as Decl['kind']
+      const nameNode = capture.node
+      // The span that "owns" inner calls is the whole declaration, not just the name.
+      const body = enclosingDeclaration(nameNode, spec.declNodeTypes)
+      // In Python/Rust/C++ a function nested in a class/impl is really a method.
+      if (kind === 'function' && spec.classAncestors.length > 0) {
+        if (hasAncestor(nameNode, spec.classAncestors)) kind = 'method'
+      }
+      const decl: Decl = {
+        id: nextId(),
+        name: nameNode.text,
+        kind,
+        file: file.path,
+        module: moduleOf(file.path),
+        row: nameNode.startPosition.row + 1,
+        excerpt: excerptAt(file.text, body.startIndex, body.endIndex),
+      }
+      decls.push(decl)
+      declNodes.push({ decl, start: body.startIndex, end: body.endIndex })
     }
-    const decl: Decl = {
-      id: nextId(),
-      name: nameNode.text,
-      kind,
-      file: file.path,
-      module: moduleOf(file.path),
-      row: nameNode.startPosition.row + 1,
-      excerpt: excerptAt(file.text, body.startIndex, body.endIndex),
+
+    // Innermost-enclosing lookup: sort by span start, ties broken by larger span first.
+    declNodes.sort((a, b) => a.start - b.start || b.end - a.end)
+
+    const calls: CallRef[] = []
+    for (const capture of callQuery.captures(tree.rootNode)) {
+      const owner = innermostOwner(declNodes, capture.node.startIndex)
+      if (!owner) continue // top-level call; not charted in the MVP
+      if (capture.node.text === owner.name) continue // direct recursion: skip self-loops
+      calls.push({
+        fromDecl: owner.id,
+        name: capture.node.text,
+        kind: capture.name.replace('call.', '') as CallRef['kind'],
+        file: file.path,
+        row: capture.node.startPosition.row,
+        col: capture.node.startPosition.column,
+      })
     }
-    decls.push(decl)
-    declNodes.push({ decl, start: body.startIndex, end: body.endIndex })
+
+    tree.delete()
+    return { decls, calls }
+  } catch (err) {
+    tree.delete()
+    if (typeof console !== 'undefined') console.warn(`[meridian] extraction failed for ${file.path}:`, err)
+    return { decls: [], calls: [] }
   }
-
-  // Innermost-enclosing lookup: sort by span start, ties broken by larger span first.
-  declNodes.sort((a, b) => a.start - b.start || b.end - a.end)
-
-  const calls: CallRef[] = []
-  for (const capture of callQuery.captures(tree.rootNode)) {
-    const owner = innermostOwner(declNodes, capture.node.startIndex)
-    if (!owner) continue // top-level call; not charted in the MVP
-    if (capture.node.text === owner.name) continue // direct recursion: skip self-loops
-    calls.push({
-      fromDecl: owner.id,
-      name: capture.node.text,
-      kind: capture.name.replace('call.', '') as CallRef['kind'],
-      file: file.path,
-      row: capture.node.startPosition.row,
-      col: capture.node.startPosition.column,
-    })
-  }
-
-  tree.delete()
-  return { decls, calls }
 }
 
 function enclosingDeclaration(nameNode: TSNode, declNodeTypes: string[]): TSNode {

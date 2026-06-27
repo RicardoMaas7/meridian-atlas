@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import type { FileEntry } from '../src/types'
-import { langForPath } from '../src/parser/languages'
+import { langForPath, langForPathWithContent } from '../src/parser/languages'
 import { MAX_FILE_BYTES, MAX_FILES, SKIP_DIRS } from '../src/parser/scan'
 
 /** Node counterpart of scanDirectoryHandle: same skip list, same limits. */
@@ -26,14 +26,23 @@ function walk(dir: string, prefix: string, entries: FileEntry[]): void {
     if (entry.isDirectory()) {
       if (!SKIP_DIRS.has(entry.name) && !entry.name.startsWith('.')) walk(full, path, entries)
     } else if (entry.isFile()) {
-      const lang = langForPath(entry.name)
-      if (!lang) continue
+      if (!langForPath(entry.name)) continue
+      let size: number
       try {
-        if (statSync(full).size > MAX_FILE_BYTES) continue
-        entries.push({ path, text: readFileSync(full, 'utf8'), lang })
+        size = statSync(full).size
       } catch {
-        // unreadable file: skip
+        continue
       }
+      if (size > MAX_FILE_BYTES) continue
+      let text: string
+      try {
+        text = readFileSync(full, 'utf8')
+      } catch {
+        continue
+      }
+      const lang = langForPathWithContent(path, text)
+      if (!lang) continue
+      entries.push({ path, text, lang })
     }
   }
 }

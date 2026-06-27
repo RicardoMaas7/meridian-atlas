@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke, isTauri as tauriIsTauri } from '@tauri-apps/api/core'
 import { open, save } from '@tauri-apps/plugin-dialog'
 import type { FileEntry } from '../types'
 
@@ -21,12 +21,7 @@ export interface ScanStats {
 
 const isTauri = (): boolean => {
   if (typeof window === 'undefined') return false
-  const w = window as unknown as Record<string, unknown>
-  return (
-    '__TAURI_INTERNALS__' in w ||
-    '__TAURI__' in w ||
-    '_TAURI_INVOKE__' in w
-  )
+  return tauriIsTauri()
 }
 
 export async function pickDirectory(): Promise<string | null> {

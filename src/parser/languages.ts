@@ -133,7 +133,7 @@ export const LANGUAGES: Record<LangId, LanguageSpec> = {
   },
   c: {
     grammar: 'tree-sitter-c.wasm',
-    extensions: ['.c'],
+    extensions: ['.c', '.h'],
     declQuery: `
       (function_definition
         declarator: (function_declarator declarator: (identifier) @def.function))
@@ -149,7 +149,7 @@ export const LANGUAGES: Record<LangId, LanguageSpec> = {
   },
   cpp: {
     grammar: 'tree-sitter-cpp.wasm',
-    extensions: ['.cpp', '.cc', '.cxx', '.hpp', '.hh', '.h'],
+    extensions: ['.cpp', '.cc', '.cxx', '.hpp', '.hh'],
     declQuery: `
       (function_definition
         declarator: (function_declarator declarator: (identifier) @def.function))
@@ -183,6 +183,29 @@ export function langForPath(path: string): LangId | null {
   const dot = path.lastIndexOf('.')
   if (dot < 0) return null
   return EXT_TO_LANG.get(path.slice(dot).toLowerCase()) ?? null
+}
+
+// `.h` files are ambiguous: C projects use them as C headers, C++ projects
+// as C++ headers. The grammar is also ambiguous — tree-sitter-cpp can parse
+// a plain C header, but tree-sitter-c will fail on `class`/`template`/
+// `namespace`. When we have the text, sniff for C++ markers in the first
+// few hundred lines and prefer the C++ grammar in that case.
+const CPP_HEADER_HINTS = [
+  /^\s*#\s*include\s*<[a-z_]+>/m,
+  /^\s*(class|struct|namespace)\s+\w+/m,
+  /^\s*template\s*</m,
+  /::\s*\w+\s*\(/m,
+]
+
+export function langForPathWithContent(path: string, text?: string): LangId | null {
+  const base = langForPath(path)
+  if (base !== 'c' || !text) return base
+  if (!path.toLowerCase().endsWith('.h')) return base
+  const head = text.slice(0, 8000)
+  for (const re of CPP_HEADER_HINTS) {
+    if (re.test(head)) return 'cpp'
+  }
+  return 'c'
 }
 
 export const SUPPORTED_LANGS_LABEL =

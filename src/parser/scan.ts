@@ -1,5 +1,5 @@
 import type { FileEntry } from '../types'
-import { langForPath } from './loader'
+import { langForPath, langForPathWithContent } from './loader'
 
 export const SKIP_DIRS = new Set([
   'node_modules',
@@ -44,8 +44,9 @@ async function walk(
       }
       continue
     }
-    const lang = langForPath(handle.name)
-    if (!lang) continue
+    // First pass: extension-only detection so we can skip unsupported
+    // files without reading them.
+    if (!langForPath(handle.name)) continue
     let file: File
     try {
       file = await (handle as FileSystemFileHandle).getFile()
@@ -53,11 +54,17 @@ async function walk(
       continue
     }
     if (file.size > MAX_FILE_BYTES) continue
+    let text: string
     try {
-      entries.push({ path, text: await file.text(), lang })
+      text = await file.text()
     } catch {
       continue
     }
+    // Second pass: refine the language for ambiguous extensions like .h
+    // (could be C or C++) by peeking at the content.
+    const lang = langForPathWithContent(path, text)
+    if (!lang) continue
+    entries.push({ path, text, lang })
     onProgress?.(entries.length)
   }
 }
@@ -74,10 +81,17 @@ export async function scanFileList(
     // Drop the root folder segment so paths match the directory-handle scan.
     const path = rel.includes('/') ? rel.slice(rel.indexOf('/') + 1) : rel
     if (path.split('/').some((seg) => SKIP_DIRS.has(seg) || seg.startsWith('.'))) continue
-    const lang = langForPath(file.name)
-    if (!lang) continue
+    if (!langForPath(file.name)) continue
     if (file.size > MAX_FILE_BYTES) continue
-    entries.push({ path, text: await file.text(), lang })
+    let text: string
+    try {
+      text = await file.text()
+    } catch {
+      continue
+    }
+    const lang = langForPathWithContent(path, text)
+    if (!lang) continue
+    entries.push({ path, text, lang })
     onProgress?.(entries.length)
   }
   return entries

@@ -2,10 +2,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::time::SystemTime;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::{Emitter, Manager, State};
+use tauri::{Emitter, Manager};
 use walkdir::WalkDir;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -36,11 +35,11 @@ const SUPPORTED_EXTENSIONS: &[(&str, &[&str])] = &[
     ("tsx", &["tsx"]),
     ("javascript", &["js", "jsx", "mjs", "cjs"]),
     ("python", &["py"]),
-    ("go", &["rs"]), // placeholder so rust tuple is in order
+    ("go", &["go"]),
     ("rust", &["rs"]),
     ("java", &["java"]),
-    ("c", &["c"]),
-    ("cpp", &["cpp", "cc", "cxx", "hpp", "hh", "h"]),
+    ("c", &["c", "h"]),
+    ("cpp", &["cpp", "cc", "cxx", "hpp", "hh"]),
 ];
 
 fn lang_for_path(path: &Path) -> Option<&'static str> {
@@ -54,6 +53,30 @@ fn lang_for_path(path: &Path) -> Option<&'static str> {
         }
     }
     None
+}
+
+/// `.h` files are ambiguous between C and C++. If the path ends in `.h`
+/// and the contents look like C++ (class/struct/namespace declarations,
+/// templates, or qualified call syntax), prefer the C++ grammar.
+fn resolve_lang(path: &Path, text: &str) -> Option<&'static str> {
+    let lang = lang_for_path(path)?;
+    if lang != "c" {
+        return Some(lang);
+    }
+    if path.to_str().map(|p| !p.to_lowercase().ends_with(".h")).unwrap_or(true) {
+        return Some(lang);
+    }
+    let head = &text[..text.len().min(8000)];
+    let cpp_markers = [
+        "\nclass ", "\nstruct ", "\nnamespace ", "\ntemplate <",
+        "::", "\n#include <",
+    ];
+    for marker in cpp_markers {
+        if head.contains(marker) {
+            return Some("cpp");
+        }
+    }
+    Some(lang)
 }
 
 const SKIP_DIRS: &[&str] = &[
@@ -161,6 +184,10 @@ fn scan_directory(path: String) -> Result<Vec<SourceFile>, String> {
             Ok(t) => t,
             Err(_) => continue,
         };
+        let resolved = match resolve_lang(path, &text) {
+            Some(l) => l,
+            None => continue,
+        };
         let relative = path
             .strip_prefix(&root)
             .unwrap_or(path)
@@ -171,7 +198,7 @@ fn scan_directory(path: String) -> Result<Vec<SourceFile>, String> {
         files.push(SourceFile {
             path: relative,
             text,
-            lang: lang.to_string(),
+            lang: resolved.to_string(),
             is_test,
             is_generated,
         });
@@ -240,33 +267,39 @@ fn import_snapshot(path: String) -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 fn open_in_editor(path: String) -> Result<(), String> {
+    let target = PathBuf::from(&path);
+    if path.trim().is_empty() {
+        return Err("Path is empty".to_string());
+    }
+    if !target.exists() {
+        return Err(format!("Path does not exist: {}", path));
+    }
+
     #[cfg(target_os = "windows")]
     {
+        // Pass the path as a single quoted argument to avoid injection via
+        // characters like '&' that cmd would otherwise interpret.
+        let path_str = target.to_string_lossy().to_string();
         std::process::Command::new("cmd")
-            .args(&["/C", "start", "", &path])
+            .args(&["/C", "start", "", &path_str])
             .spawn()
             .map_err(|e| e.to_string())?;
     }
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
-            .arg(&path)
+            .arg(&target)
             .spawn()
             .map_err(|e| e.to_string())?;
     }
     #[cfg(target_os = "linux")]
     {
         std::process::Command::new("xdg-open")
-            .arg(&path)
+            .arg(&target)
             .spawn()
             .map_err(|e| e.to_string())?;
     }
     Ok(())
-}
-
-#[derive(Default)]
-pub struct WatchState {
-    last_modified: Mutex<HashMap<String, SystemTime>>,
 }
 
 /// Compute a per-file mtime snapshot for the given paths. Returns a
@@ -316,6 +349,9 @@ fn watch_snapshot(root: String) -> Result<HashMap<String, u64>, String> {
         if lang_for_path(path).is_none() {
             continue;
         }
+        // `watch_snapshot` doesn't read the file, so for `.h` we can't
+        // disambiguate C from C++. Both C and C++ headers are watched;
+        // the language only matters when a full survey is built.
         if let Ok(meta) = entry.metadata() {
             if let Ok(mtime) = meta.modified() {
                 if let Ok(dur) = mtime.duration_since(SystemTime::UNIX_EPOCH) {
@@ -339,7 +375,6 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::default().build())
-        .manage(WatchState::default())
         .setup(|app| {
             let open_folder = MenuItemBuilder::new("Open Folder…")
                 .id("open_folder")

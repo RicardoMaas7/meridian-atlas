@@ -16,7 +16,18 @@ export async function buildChart(
   const calls: CallRef[] = []
 
   for (let i = 0; i < files.length; i++) {
-    const result = await extractFile(files[i], nextId)
+    let result
+    try {
+      result = await extractFile(files[i], nextId)
+    } catch (err) {
+      // extractFile already swallows its own errors and returns empty
+      // results, but keep this guard for catastrophic failures (e.g.
+      // a future tree-sitter bug that escapes the parser).
+      if (typeof console !== 'undefined') {
+        console.warn(`[meridian] buildChart skipped ${files[i].path}:`, err)
+      }
+      result = { decls: [], calls: [] }
+    }
     decls.push(...result.decls)
     calls.push(...result.calls)
     onProgress?.(i + 1, files.length)

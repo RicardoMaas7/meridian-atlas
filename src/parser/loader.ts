@@ -2,7 +2,7 @@ import { Parser, Language } from 'web-tree-sitter'
 import type { LangId } from '../types'
 import { LANGUAGES } from './languages'
 
-export { langForPath } from './languages'
+export { langForPath, langForPathWithContent } from './languages'
 
 let initialized = false
 const languages = new Map<LangId, Language>()

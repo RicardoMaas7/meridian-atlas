@@ -96,14 +96,27 @@ export function ChartCanvas({
   const dragRef = useRef<{ x: number; y: number; vx: number; vy: number; button: number } | null>(null)
   const dragMovedRef = useRef(false)
   const lastPinchDist = useRef<number | null>(null)
+  // The tooltip ref is read by pointer event listeners (kept in a ref so
+  // their identity never changes and React doesn't re-attach them). The
+  // state mirrors the ref only for rendering.
+  const [tooltip, setTooltipState] = useState<{ x: number; y: number; node: NodePos } | null>(null)
+  const tooltipRef = useRef<{ x: number; y: number; node: NodePos } | null>(null)
+  const setTooltip = (next: { x: number; y: number; node: NodePos } | null) => {
+    tooltipRef.current = next
+    setTooltipState(next)
+  }
   const [hoverId, setHoverId] = useState<number | null>(null)
-  const [tooltip, setTooltip] = useState<{ x: number; y: number; node: NodePos } | null>(null)
   const [showMiniMap, setShowMiniMap] = useState(true)
   const [miniMapTick, setMiniMapTick] = useState(0)
   const [mounted, setMounted] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const [containerWidth, setContainerWidth] = useState(0)
 
-  // Re-tick the layout so node positions feel physical (d3-force)
-  const { nodeMap, edges, bounds, moduleColors } = useMemo(() => {
+  // Pass 1: run the force simulation only when the chart shape or "new"
+  // highlights change. This is the expensive step (240 ticks) and must
+  // NOT re-run on every keystroke of the search input or every filter
+  // toggle.
+  const layout = useMemo(() => {
     const { simulation } = startLayout(chart)
     for (let i = 0; i < 240; i++) simulation.tick()
     const pos = new Map<number, { x: number; y: number }>()
@@ -171,6 +184,52 @@ export function ChartCanvas({
       })
     }
 
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const p of pos.values()) {
+      if (p.x < minX) minX = p.x
+      if (p.y < minY) minY = p.y
+      if (p.x > maxX) maxX = p.x
+      if (p.y > maxY) maxY = p.y
+    }
+    const pad = 120
+    minX -= pad
+    minY -= pad
+    maxX += pad
+    maxY += pad
+    const size = Math.max(maxX - minX, maxY - minY)
+
+    return {
+      nodeMap: map,
+      moduleColors: modColor,
+      bounds: { minX, minY, maxX, maxY, size },
+      pos,
+    }
+  }, [chart, newIds])
+
+  // Pass 2: cheap filter/highlight/edge-curve computation that can re-run
+  // freely on every interaction. Reads the cached `layout` (pos, nodeMap).
+  const { nodeMap, edges } = useMemo(() => {
+    const map = new Map(layout.nodeMap)
+    for (const n of map.values()) {
+      n.isSearchHit = searchMatch?.has(n.id) ?? false
+      n.isFaded = false
+    }
+
+    // Apply kind filter / rocks / new-only: these mutate the working
+    // map, so affected IDs are removed from the visible graph and
+    // their edges drop out as a side effect.
+    const visibleIds = new Set<number>()
+    for (const n of map.values()) {
+      let keep = true
+      if (highlightKind && highlightKind !== 'all' && n.kind !== highlightKind) keep = false
+      if (hideRocks && n.isRock) keep = false
+      if (newOnly && !n.isNew) keep = false
+      if (keep) visibleIds.add(n.id)
+    }
+    for (const id of Array.from(map.keys())) {
+      if (!visibleIds.has(id)) map.delete(id)
+    }
+
     const incident = new Set<number>()
     if (selectedId != null) {
       incident.add(selectedId)
@@ -193,16 +252,15 @@ export function ChartCanvas({
       n.isFaded =
         (selectedId != null && !incident.has(n.id)) ||
         (searchMatch != null && searchMatch.size > 0 && !searchRelated.has(n.id))
-      n.isSearchHit = searchMatch?.has(n.id) ?? false
     }
 
-    const edgePaths: EdgePath[] = chart.edges.flatMap((e) => {
-      const a = pos.get(e.source)
-      const b = pos.get(e.target)
-      if (!a || !b) return []
+    const edgePaths: EdgePath[] = []
+    for (const e of chart.edges) {
+      const a = layout.pos.get(e.source)
+      const b = layout.pos.get(e.target)
       const na = map.get(e.source)
       const nb = map.get(e.target)
-      if (!na || !nb) return []
+      if (!a || !b || !na || !nb) continue
       const dx = b.x - a.x
       const dy = b.y - a.y
       const len = Math.hypot(dx, dy) || 1
@@ -220,7 +278,7 @@ export function ChartCanvas({
       const isInc = isSel && (e.source === selectedId || e.target === selectedId)
       const isFadedEdge = isSel && !isInc
       const isSearchRel = searchRelated.has(e.source) && searchRelated.has(e.target)
-      return [{
+      edgePaths.push({
         d,
         source: e.source,
         target: e.target,
@@ -229,30 +287,13 @@ export function ChartCanvas({
         selected: isSel,
         searchRelated: isSearchRel,
         isFaded: isFadedEdge,
-      }]
-    })
-
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-    for (const p of pos.values()) {
-      if (p.x < minX) minX = p.x
-      if (p.y < minY) minY = p.y
-      if (p.x > maxX) maxX = p.x
-      if (p.y > maxY) maxY = p.y
+      })
     }
-    const pad = 120
-    minX -= pad
-    minY -= pad
-    maxX += pad
-    maxY += pad
-    const size = Math.max(maxX - minX, maxY - minY)
 
-    return {
-      nodeMap: map,
-      edges: edgePaths,
-      bounds: { minX, minY, maxX, maxY, size },
-      moduleColors: modColor,
-    }
-  }, [chart, newIds, selectedId, highlightKind, hideRocks, newOnly, searchMatch])
+    return { nodeMap: map, edges: edgePaths }
+  }, [layout, chart.edges, selectedId, highlightKind, hideRocks, newOnly, searchMatch])
+
+  const { moduleColors, bounds, pos: _pos } = layout
 
   useEffect(() => {
     viewRef.current = {
@@ -262,6 +303,21 @@ export function ChartCanvas({
     }
     setMounted(true)
   }, [bounds])
+
+  // Track the container width in state so the tooltip can clamp itself
+  // during render without reading a ref (which the linter forbids).
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    setContainerWidth(el.clientWidth)
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width)
+      }
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   // Animate the viewBox to a focused node when focusId changes.
   useEffect(() => {
@@ -319,6 +375,7 @@ export function ChartCanvas({
       ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
       dragRef.current = { x: e.clientX, y: e.clientY, vx: 0, vy: 0, button: e.button }
       dragMovedRef.current = false
+      setIsDragging(true)
     }
     const onPointerMove = (e: PointerEvent) => {
       const drag = dragRef.current
@@ -336,12 +393,19 @@ export function ChartCanvas({
       drag.x = e.clientX
       drag.y = e.clientY
       render()
-      if (tooltip) setTooltip({ ...tooltip, x: e.clientX - rect.left, y: e.clientY - rect.top })
+      if (tooltipRef.current) {
+        const next = { ...tooltipRef.current, x: e.clientX - rect.left, y: e.clientY - rect.top }
+        tooltipRef.current = next
+        setTooltipState(next)
+      }
     }
     const onPointerUp = (e: PointerEvent) => {
       const drag = dragRef.current
       ;(e.currentTarget as Element).releasePointerCapture?.(e.pointerId)
-      if (!drag) return
+      if (!drag) {
+        setIsDragging(false)
+        return
+      }
       if (!dragMovedRef.current && drag.button === 0) {
         const target = e.target as Element
         const nodeEl = target.closest('[data-node]') as HTMLElement | null
@@ -352,6 +416,7 @@ export function ChartCanvas({
         }
       }
       dragRef.current = null
+      setIsDragging(false)
       const applyInertia = () => {
         if (!dragRef.current && Math.hypot(drag.vx, drag.vy) > 0.4) {
           const v = viewRef.current
@@ -451,7 +516,7 @@ export function ChartCanvas({
       svg.removeEventListener('touchend', onTouchEnd)
       window.removeEventListener('keydown', onKeyDown)
     }
-  }, [bounds, onSelect, tooltip])
+  }, [bounds, onSelect])
 
   const nodeList = useMemo(() => Array.from(nodeMap.values()), [nodeMap])
 
@@ -661,11 +726,11 @@ export function ChartCanvas({
         </g>
       </svg>
 
-      {tooltip && !dragRef.current && (
+      {tooltip && !isDragging && (
         <div
           className="chart-tooltip"
           style={{
-            left: Math.min(tooltip.x + 14, (containerRef.current?.clientWidth ?? 0) - 240),
+            left: Math.min(tooltip.x + 14, containerWidth - 240),
             top: Math.max(tooltip.y - 12, 12),
           }}
         >

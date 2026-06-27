@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { SKIP_DIRS, MAX_FILES, MAX_FILE_BYTES } from './scan'
-import { langForPath, SUPPORTED_LANGS_LABEL } from './languages'
+import { langForPath, langForPathWithContent, SUPPORTED_LANGS_LABEL } from './languages'
 
 describe('SKIP_DIRS', () => {
   it('includes common directories to skip', () => {
@@ -92,7 +92,49 @@ describe('langForPath', () => {
     expect(langForPath('foo.cc')).toBe('cpp')
     expect(langForPath('foo.cxx')).toBe('cpp')
     expect(langForPath('foo.hh')).toBe('cpp')
-    expect(langForPath('foo.h')).toBe('cpp')
+  })
+
+  it('treats .h as C by default', () => {
+    // .h is ambiguous; without content the safer default is C so that
+    // tree-sitter-cpp (which is a superset) never claims a pure C header.
+    expect(langForPath('foo.h')).toBe('c')
+  })
+})
+
+describe('langForPathWithContent', () => {
+  it('returns the extension-based language when no text is given', () => {
+    expect(langForPathWithContent('foo.h')).toBe('c')
+  })
+
+  it('upgrades a .h file to C++ when it contains a class declaration', () => {
+    const text = '#ifndef FOO_H\n#define FOO_H\nclass Foo {\npublic:\n  int x;\n};\n#endif\n'
+    expect(langForPathWithContent('foo.h', text)).toBe('cpp')
+  })
+
+  it('upgrades a .h file to C++ when it includes a system C++ header', () => {
+    const text = '#include <vector>\n#include <string>\nvoid doStuff(std::vector<int> v);\n'
+    expect(langForPathWithContent('foo.h', text)).toBe('cpp')
+  })
+
+  it('upgrades a .h file to C++ when it uses templates or namespace', () => {
+    const text = 'namespace my {\ntemplate <typename T>\nT id(T x) { return x; }\n}\n'
+    expect(langForPathWithContent('foo.h', text)).toBe('cpp')
+  })
+
+  it('keeps .h as C when the content looks like a plain C header', () => {
+    const text = '#ifndef FOO_H\n#define FOO_H\nvoid foo(int x);\nint bar(int y);\n#endif\n'
+    expect(langForPathWithContent('foo.h', text)).toBe('c')
+  })
+
+  it('does not affect non-C languages even with C++ markers in the text', () => {
+    expect(langForPathWithContent('foo.ts', 'class Foo {}')).toBe('typescript')
+    expect(langForPathWithContent('foo.py', 'class Foo: pass')).toBe('python')
+  })
+
+  it('ignores C++ markers past the snippet window', () => {
+    const padding = '// pad\n'.repeat(2000)
+    const text = `${padding}\nclass Foo {};\n`
+    expect(langForPathWithContent('foo.h', text)).toBe('c')
   })
 })
 
